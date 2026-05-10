@@ -10,6 +10,8 @@ for path in \
   LICENSE \
   LICENSES/AGPL-3.0-or-later.txt \
   LICENSES/Apache-2.0.txt \
+  .env.example \
+  compose.dev.yaml \
   apps/web/package.json \
   apps/api/package.json \
   apps/worker/package.json \
@@ -18,9 +20,7 @@ for path in \
   packages/validation/package.json \
   packages/edge-protocol/LICENSE \
   packages/adguard-client/LICENSE \
-  packages/db/LICENSE \
-  deploy/nabe/compose.yaml \
-  deploy/speiche/compose.yaml; do
+  packages/db/LICENSE; do
   test -e "$path" || { echo "missing $path"; exit 1; }
 done
 

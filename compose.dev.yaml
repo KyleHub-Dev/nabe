@@ -1,0 +1,151 @@
+name: nabe-dev
+
+services:
+  nabe-web:
+    image: nabe-web:dev
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NABE_API_URL: ${NABE_API_URL:-http://nabe-api:8080}
+    ports:
+      - "${NABE_WEB_BIND:-127.0.0.1:5173}:5173/tcp"
+    depends_on:
+      nabe-api:
+        condition: service_started
+    networks:
+      - nabe-dns
+
+  nabe-api:
+    image: nabe-api:dev
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NABE_API_HOST: ${NABE_API_HOST:-0.0.0.0}
+      NABE_API_PORT: ${NABE_API_PORT:-8080}
+      DATABASE_URL: ${DATABASE_URL:-postgres://nabe:change-me-local-only@nabe-postgres:5432/nabe}
+      ADGUARD_BASE_URL: ${ADGUARD_BASE_URL:-http://dns-adguard:3000}
+    ports:
+      - "${NABE_API_BIND:-127.0.0.1:8080}:8080/tcp"
+    depends_on:
+      nabe-postgres:
+        condition: service_healthy
+      dns-adguard:
+        condition: service_started
+    networks:
+      - nabe-dns
+
+  nabe-worker:
+    image: nabe-worker:dev
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://nabe:change-me-local-only@nabe-postgres:5432/nabe}
+      ADGUARD_BASE_URL: ${ADGUARD_BASE_URL:-http://dns-adguard:3000}
+    depends_on:
+      nabe-postgres:
+        condition: service_healthy
+      dns-adguard:
+        condition: service_started
+    networks:
+      - nabe-dns
+
+  nabe-postgres:
+    image: docker.io/postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nabe}
+      POSTGRES_USER: ${POSTGRES_USER:-nabe}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
+    volumes:
+      - nabe-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - nabe-dns
+
+  dns-unbound:
+    image: docker.io/mvance/unbound:latest
+    restart: unless-stopped
+    networks:
+      nabe-dns:
+        ipv4_address: 172.30.10.10
+
+  dns-adguard:
+    image: docker.io/adguard/adguardhome:latest
+    restart: unless-stopped
+    depends_on:
+      dns-unbound:
+        condition: service_started
+    ports:
+      # Plain DNS/53 is intentionally not exposed in the dev stack.
+      # DoT/DoH are loopback-only by default.
+      - "${DNS_DOT_BIND:-127.0.0.1:853}:853/tcp"
+      - "${DNS_DOT_BIND:-127.0.0.1:853}:853/udp"
+      - "${DNS_DOH_BIND:-127.0.0.1:4443}:443/tcp"
+      # Native AdGuard UI/API debug binding. Keep loopback-only by default.
+      - "${ADGUARD_DEBUG_BIND:-127.0.0.1:3000}:3000/tcp"
+    volumes:
+      - dns-adguard-work:/opt/adguardhome/work
+      - dns-adguard-conf:/opt/adguardhome/conf
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+    networks:
+      - nabe-dns
+      - nabe-edge
+
+  dns-newt:
+    image: docker.io/fosrl/newt:latest
+    restart: unless-stopped
+    profiles:
+      - edge
+    environment:
+      PANGOLIN_ENDPOINT: ${PANGOLIN_ENDPOINT}
+      NEWT_ID: ${NEWT_ID}
+      NEWT_SECRET: ${NEWT_SECRET}
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+    depends_on:
+      nabe-web:
+        condition: service_started
+      nabe-api:
+        condition: service_started
+      dns-adguard:
+        condition: service_started
+    networks:
+      - nabe-edge
+
+networks:
+  nabe-dns:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24
+  nabe-edge:
+    driver: bridge
+
+volumes:
+  nabe-postgres-data:
+    driver: local
+  dns-adguard-work:
+    driver: local
+  dns-adguard-conf:
+    driver: local

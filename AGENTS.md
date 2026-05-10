@@ -25,7 +25,7 @@ These instructions apply to the whole repository. They guide future coding agent
 - CLI: Go.
 - Package manager: pnpm workspaces.
 - Runtime: Node.js LTS.
-- Deployment: Docker/Podman-compatible Compose.
+- Deployment: root-level Docker/Podman-compatible `compose.dev.yaml` for the self-contained MVP stack.
 
 ## Repository Layout
 
@@ -115,6 +115,9 @@ cd apps/cli && go test ./...
 - Prefer existing package boundaries over adding new packages.
 - Put shared request/response validation in `packages/validation`.
 - Keep DNS Engine integrations behind adapter/client boundaries.
+- For MVP deployment work, keep one root-level self-contained `compose.dev.yaml` plus `.env.example`.
+- Do not add separate `deploy/` directories for Nabe or Speiche during MVP 0.
+- Speiche deployment is not MVP 0. Later, Speiche should be installable through Nabe CLI/control tooling.
 - Keep Zitadel/OIDC-specific logic in `packages/auth` and API integration code.
 - Add database schema changes in `packages/db`.
 - Keep Speiche outbound-only by default.

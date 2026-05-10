@@ -10,6 +10,7 @@ Nabe is the product and control plane. DNS Engines do the resolver work.
 - Nabe CLI: Go command-line tool for future admin/operator workflows.
 - DB: PostgreSQL system of record.
 - AdGuard Home engine adapter: first DNS Engine integration.
+- Unbound: local recursive resolver component per deployment.
 - Speiche Agent: outbound edge connector for future Edge Nodes.
 - Edge Nodes: future remote/local DNS nodes managed through Speiche.
 
@@ -17,6 +18,7 @@ Nabe is the product and control plane. DNS Engines do the resolver work.
 
 ```text
 User -> Nabe Web -> Nabe API -> AdGuard API
+AdGuard Home -> Unbound
 Speiche -> Nabe API -> jobs/heartbeat/status
 ```
 

@@ -31,7 +31,6 @@ apps/worker       background jobs, AGPL-3.0-or-later
 apps/speiche      Speiche Agent, Apache-2.0
 apps/cli          Go CLI for admin/operator workflows, Apache-2.0
 packages/*        shared packages with package-level licenses
-deploy/           Docker/Podman Compose skeletons
 docs/             product, architecture, security, and roadmap docs
 scripts/          repo setup and verification helpers
 LICENSES/         canonical license texts
@@ -42,6 +41,13 @@ LICENSES/         canonical license texts
 ```sh
 pnpm install
 pnpm dev
+```
+
+Self-contained Compose development stack:
+
+```sh
+cp .env.example .env
+podman compose -f compose.dev.yaml up -d --build
 ```
 
 The current services are placeholders:
@@ -59,6 +65,10 @@ Codeberg is the primary Git host. GitHub is a reach/community mirror.
 `origin` fetches from Codeberg and pushes `main` to both Codeberg and GitHub through multiple push URLs. The `github` remote is a convenience remote.
 
 See [docs/git-remotes-and-mirroring.md](docs/git-remotes-and-mirroring.md).
+
+## MVP Development Stack
+
+The first real Nabe version is developed against a self-contained Compose stack with Nabe, PostgreSQL, AdGuard Home, Unbound, and optional Newt. See [docs/mvp-deployment.md](docs/mvp-deployment.md) and [compose.dev.yaml](compose.dev.yaml).
 
 ## Licensing
 
