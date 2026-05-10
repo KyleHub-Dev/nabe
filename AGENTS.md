@@ -16,11 +16,11 @@ These instructions apply to the whole repository. They guide future coding agent
 ## Stack
 
 - Web: SvelteKit + TypeScript.
-- API: Fastify + TypeScript.
-- Worker: TypeScript.
-- Database: PostgreSQL + Drizzle ORM.
+- API: Rust + Axum.
+- Worker: out of MVP 0 deployment unless explicitly reintroduced.
+- Database: Turso Database Rust rewrite, embedded in the Rust API container.
 - Validation: Zod through `@nabe/validation`.
-- Auth: Zitadel via OIDC through `@nabe/auth`.
+- Auth: Zitadel via OIDC handled by the Rust API.
 - Edge Agent: Go.
 - CLI: Go.
 - Package manager: pnpm workspaces.
@@ -30,14 +30,11 @@ These instructions apply to the whole repository. They guide future coding agent
 ## Repository Layout
 
 - `apps/web`: Nabe Console, AGPL-3.0-or-later.
-- `apps/api`: Nabe API, AGPL-3.0-or-later.
+- `apps/api`: Rust Nabe API, AGPL-3.0-or-later.
 - `apps/worker`: background worker, AGPL-3.0-or-later.
 - `apps/speiche`: Speiche Agent, Apache-2.0.
 - `apps/cli`: Nabe CLI, Apache-2.0.
 - `packages/edge-protocol`: shared edge protocol, Apache-2.0.
-- `packages/adguard-client`: AdGuard Home API client, Apache-2.0.
-- `packages/db`: Drizzle schema and migrations, AGPL-3.0-or-later.
-- `packages/auth`: Zitadel/OIDC helpers, AGPL-3.0-or-later.
 - `packages/validation`: shared Zod schemas, AGPL-3.0-or-later.
 - `packages/config`: shared config loading, Apache-2.0 unless it imports AGPL code.
 - `packages/ui`: shared UI components, AGPL-3.0-or-later.
@@ -94,6 +91,7 @@ Run these before committing meaningful changes:
 ```sh
 pnpm lint
 pnpm build
+pnpm test:api
 pnpm test:go
 scripts/verify-repo.sh
 ```
@@ -102,8 +100,7 @@ Use focused checks while iterating:
 
 ```sh
 pnpm --filter @nabe/web lint
-pnpm --filter @nabe/api lint
-pnpm --filter @nabe/db lint
+env -u APPIMAGE -u APPDIR cargo test --manifest-path apps/api/Cargo.toml
 cd apps/speiche && go test ./...
 cd apps/cli && go test ./...
 ```
@@ -118,7 +115,7 @@ cd apps/cli && go test ./...
 - For MVP deployment work, keep one root-level self-contained `compose.dev.yaml` plus `.env.example`.
 - Do not add separate `deploy/` directories for Nabe or Speiche during MVP 0.
 - Speiche deployment is not MVP 0. Later, Speiche should be installable through Nabe CLI/control tooling.
-- Keep Zitadel/OIDC-specific logic in `packages/auth` and API integration code.
-- Add database schema changes in `packages/db`.
+- Keep Zitadel/OIDC-specific logic in the Rust API `auth` module.
+- Add database schema changes as explicit SQL migrations in `apps/api/migrations`.
 - Keep Speiche outbound-only by default.
 - Keep CLI workflows operator-focused and avoid duplicating web product flows unless they are useful for automation.

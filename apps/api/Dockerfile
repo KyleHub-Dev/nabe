@@ -1,10 +1,15 @@
-FROM node:lts-bookworm
-WORKDIR /app
-RUN corepack enable
-COPY package.json pnpm-workspace.yaml ./
-COPY apps/api/package.json apps/api/package.json
-RUN pnpm install --filter @nabe/api --frozen-lockfile=false
-COPY apps/api apps/api
-WORKDIR /app/apps/api
+FROM rust:1-bookworm AS build
+WORKDIR /src/apps/api
+COPY apps/api/Cargo.toml ./
+COPY apps/api/Cargo.lock ./
+COPY apps/api/src src
+COPY apps/api/migrations migrations
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=build /src/apps/api/target/release/nabe-api /usr/local/bin/nabe-api
 EXPOSE 8080
-CMD ["pnpm", "dev"]
+ENTRYPOINT ["nabe-api"]

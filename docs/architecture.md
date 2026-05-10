@@ -5,10 +5,10 @@ Nabe is the product and control plane. DNS Engines do the resolver work.
 ## Components
 
 - Nabe Web: browser UI for the Nabe Console.
-- Nabe API: backend authority for users, Device Clients, permissions, Client Tokens, audit logs, DNS Engine adapters, and filtered query visibility.
-- Nabe Worker: background jobs for sync, cleanup, and future edge processing.
+- Nabe API: Rust backend authority for OIDC sessions, Turso persistence, DNS Engine adapters, and filtered query visibility.
+- Nabe Worker: future background jobs for sync, cleanup, and edge processing. It is outside MVP 0 deployment.
 - Nabe CLI: Go command-line tool for future admin/operator workflows.
-- DB: PostgreSQL system of record.
+- DB: Turso Database Rust rewrite, embedded in the Rust API container for MVP 0.
 - AdGuard Home engine adapter: first DNS Engine integration.
 - Unbound: local recursive resolver component per deployment.
 - Speiche Agent: outbound edge connector for future Edge Nodes.
@@ -29,11 +29,11 @@ Native AdGuard UI is not the product UI. It is reserved for private break-glass/
 ## Stack
 
 - Web: SvelteKit + TypeScript.
-- API: Fastify + TypeScript.
-- Worker: TypeScript.
-- Database: PostgreSQL + Drizzle ORM.
+- API: Rust + Axum.
+- Worker: out of MVP 0 deployment.
+- Database: Turso Database Rust rewrite.
 - Validation: Zod, shared through `@nabe/validation`.
-- Auth: Zitadel via OIDC, with helpers staged in `@nabe/auth`.
+- Auth: Zitadel via OIDC handled by the Rust API.
 - Edge Agent: Go.
 - CLI: Go.
 - Package manager: pnpm workspaces.

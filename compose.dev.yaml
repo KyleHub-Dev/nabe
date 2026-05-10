@@ -11,6 +11,7 @@ services:
       - .env
     environment:
       NABE_API_URL: ${NABE_API_URL:-http://nabe-api:8080}
+      VITE_NABE_API_URL: ${VITE_NABE_API_URL:-http://localhost:8080}
     ports:
       - "${NABE_WEB_BIND:-127.0.0.1:5173}:5173/tcp"
     depends_on:
@@ -30,52 +31,15 @@ services:
     environment:
       NABE_API_HOST: ${NABE_API_HOST:-0.0.0.0}
       NABE_API_PORT: ${NABE_API_PORT:-8080}
-      DATABASE_URL: ${DATABASE_URL:-postgres://nabe:change-me-local-only@nabe-postgres:5432/nabe}
+      NABE_DATABASE_PATH: ${NABE_DATABASE_PATH:-/data/nabe.db}
       ADGUARD_BASE_URL: ${ADGUARD_BASE_URL:-http://dns-adguard:3000}
+    volumes:
+      - nabe-data:/data
     ports:
       - "${NABE_API_BIND:-127.0.0.1:8080}:8080/tcp"
     depends_on:
-      nabe-postgres:
-        condition: service_healthy
       dns-adguard:
         condition: service_started
-    networks:
-      - nabe-dns
-
-  nabe-worker:
-    image: nabe-worker:dev
-    build:
-      context: .
-      dockerfile: apps/worker/Dockerfile
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://nabe:change-me-local-only@nabe-postgres:5432/nabe}
-      ADGUARD_BASE_URL: ${ADGUARD_BASE_URL:-http://dns-adguard:3000}
-    depends_on:
-      nabe-postgres:
-        condition: service_healthy
-      dns-adguard:
-        condition: service_started
-    networks:
-      - nabe-dns
-
-  nabe-postgres:
-    image: docker.io/postgres:16
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-nabe}
-      POSTGRES_USER: ${POSTGRES_USER:-nabe}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
-    volumes:
-      - nabe-postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     networks:
       - nabe-dns
 
@@ -143,7 +107,7 @@ networks:
     driver: bridge
 
 volumes:
-  nabe-postgres-data:
+  nabe-data:
     driver: local
   dns-adguard-work:
     driver: local

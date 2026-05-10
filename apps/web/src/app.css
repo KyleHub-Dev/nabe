@@ -108,6 +108,17 @@ h1 {
   gap: 12px;
 }
 
+.text-button {
+  align-self: end;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 38px;
+  padding: 9px 12px;
+}
+
 label {
   color: var(--muted);
   display: grid;
@@ -122,6 +133,34 @@ select {
   color: var(--text);
   min-width: 132px;
   padding: 9px 10px;
+}
+
+.status-band {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.status-band div {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+}
+
+.status-band span,
+dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-band strong,
+dd {
+  color: var(--text);
 }
 
 .grid {
@@ -148,6 +187,24 @@ select {
   line-height: 1.5;
 }
 
+dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+dl div {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+dd {
+  margin: 0;
+  text-align: right;
+}
+
 @media (max-width: 780px) {
   .shell {
     grid-template-columns: 1fr;
@@ -169,6 +226,10 @@ select {
   .topbar,
   .controls {
     flex-direction: column;
+  }
+
+  .status-band {
+    grid-template-columns: 1fr;
   }
 
   h1 {

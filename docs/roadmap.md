@@ -2,7 +2,7 @@
 
 ## MVP 0
 
-Single user, single Cloud AdGuard, local Unbound recursion, token/device portal, and one Compose stack that can run Nabe beside the DNS components.
+Single admin via Zitadel OIDC, single Cloud AdGuard, local Unbound recursion, Rust API with Turso Database persistence, and one Compose stack that can run Nabe beside the DNS components.
 
 ## MVP 1
 

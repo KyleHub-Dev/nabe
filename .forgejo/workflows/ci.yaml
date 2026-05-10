@@ -16,7 +16,7 @@ jobs:
         with:
           version: 9.15.0
       - run: pnpm install --frozen-lockfile=false
+      - run: apt-get update && apt-get install -y cargo golang-go
       - run: pnpm lint
       - run: pnpm build
-      - run: apt-get update && apt-get install -y golang-go
-      - run: pnpm test:go
+      - run: pnpm test

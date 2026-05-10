@@ -18,7 +18,7 @@ AdGuard Home is consumed through its API by the Nabe backend. Native AdGuard UI 
 
 ## Architecture Summary
 
-The initial MVP targets a single admin user, a single Cloud DNS master backed by AdGuard Home, and tokenized Device Client management for DoT/DoH/DoQ.
+The MVP 0 target is a single admin login through Zitadel, a Rust Nabe API with Turso Database persistence, and live status for one Cloud DNS master backed by AdGuard Home and Unbound.
 
 The browser must never receive AdGuard admin credentials. DNS logs and stats must be filtered server-side by owned client IDs. Cloud DNS should only allow tokenized clients through AdGuard Allowed Clients / ClientIDs.
 
@@ -26,8 +26,8 @@ The browser must never receive AdGuard admin credentials. DNS logs and stats mus
 
 ```text
 apps/web          Nabe Console, AGPL-3.0-or-later
-apps/api          Nabe API, AGPL-3.0-or-later
-apps/worker       background jobs, AGPL-3.0-or-later
+apps/api          Rust Nabe API, AGPL-3.0-or-later
+apps/worker       background jobs placeholder, AGPL-3.0-or-later
 apps/speiche      Speiche Agent, Apache-2.0
 apps/cli          Go CLI for admin/operator workflows, Apache-2.0
 packages/*        shared packages with package-level licenses
@@ -53,8 +53,8 @@ podman compose -f compose.dev.yaml up -d --build
 The current services are placeholders:
 
 - Web: SvelteKit Nabe Console stub with German default UI, English language option, and system/light/dark theme support.
-- API: TypeScript Fastify health and placeholder routes.
-- Worker: TypeScript startup stub with planned job list.
+- API: Rust Axum service with Turso persistence, Zitadel OIDC callback, and AdGuard Engine status endpoints.
+- Worker: TypeScript startup stub, not part of MVP 0 Compose deployment.
 - Speiche: Go agent stub with outbound-only behavior by default.
 - CLI: Go command stub for future admin/operator workflows.
 
@@ -68,7 +68,7 @@ See [docs/git-remotes-and-mirroring.md](docs/git-remotes-and-mirroring.md).
 
 ## MVP Development Stack
 
-The first real Nabe version is developed against a self-contained Compose stack with Nabe, PostgreSQL, AdGuard Home, Unbound, and optional Newt. See [docs/mvp-deployment.md](docs/mvp-deployment.md) and [compose.dev.yaml](compose.dev.yaml).
+The first real Nabe version is developed against a self-contained Compose stack with Nabe, Turso Database persistence inside the Rust API, AdGuard Home, Unbound, and optional Newt. See [docs/mvp-0.md](docs/mvp-0.md), [docs/mvp-deployment.md](docs/mvp-deployment.md), and [compose.dev.yaml](compose.dev.yaml).
 
 ## Licensing
 

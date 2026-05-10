@@ -6,9 +6,10 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "pnpm --filter @nabe/web dev",
-    "build": "pnpm -r --if-present build",
-    "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build && env -u APPIMAGE -u APPDIR cargo build --manifest-path apps/api/Cargo.toml",
+    "lint": "pnpm -r --if-present lint && env -u APPIMAGE -u APPDIR cargo check --manifest-path apps/api/Cargo.toml",
+    "test": "pnpm -r --if-present test && pnpm test:api && pnpm test:go",
+    "test:api": "env -u APPIMAGE -u APPDIR cargo test --manifest-path apps/api/Cargo.toml",
     "test:go": "cd apps/speiche && go test ./... && cd ../cli && go test ./...",
     "verify": "scripts/verify-repo.sh"
   },
