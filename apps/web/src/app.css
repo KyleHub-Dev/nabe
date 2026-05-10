@@ -1,0 +1,177 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f7f8f5;
+  --panel: #ffffff;
+  --text: #1d2523;
+  --muted: #586560;
+  --line: #d9dfd8;
+  --accent: #0f766e;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #111614;
+  --panel: #18201d;
+  --text: #edf4ef;
+  --muted: #a4b0aa;
+  --line: #2a3631;
+  --accent: #5eead4;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #111614;
+    --panel: #18201d;
+    --text: #edf4ef;
+    --muted: #a4b0aa;
+    --line: #2a3631;
+    --accent: #5eead4;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  border-right: 1px solid var(--line);
+  padding: 24px;
+}
+
+.brand {
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 28px;
+}
+
+nav {
+  display: grid;
+  gap: 8px;
+}
+
+nav a {
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 12px;
+  text-decoration: none;
+}
+
+nav a[aria-current='page'],
+nav a:hover {
+  background: var(--panel);
+}
+
+.content {
+  padding: 32px;
+}
+
+.topbar {
+  align-items: start;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 34px;
+  line-height: 1.15;
+}
+
+.topbar p {
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+}
+
+label {
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  gap: 6px;
+}
+
+select {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  min-width: 132px;
+  padding: 9px 10px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-height: 120px;
+  padding: 18px;
+}
+
+.card h2 {
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+.card p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+@media (max-width: 780px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .content {
+    padding: 22px;
+  }
+
+  .topbar,
+  .controls {
+    flex-direction: column;
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+}

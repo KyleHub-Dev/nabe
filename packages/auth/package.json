@@ -1,0 +1,12 @@
+{
+  "name": "@nabe/auth",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "echo \"No auth build yet\"",
+    "lint": "echo \"No auth lint yet\"",
+    "test": "echo \"No auth tests yet\""
+  }
+}

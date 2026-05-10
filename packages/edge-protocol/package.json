@@ -1,0 +1,17 @@
+{
+  "name": "@nabe/edge-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"No edge-protocol tests yet\""
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

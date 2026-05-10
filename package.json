@@ -1,0 +1,17 @@
+{
+  "name": "nabe",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Self-hosted DNS control plane by KyleHub.",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @nabe/web dev",
+    "build": "pnpm -r --if-present build",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "verify": "scripts/verify-repo.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,39 @@
+services:
+  web:
+    image: nabe-web:dev
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    env_file: .env
+    depends_on:
+      - api
+
+  api:
+    image: nabe-api:dev
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    env_file: .env
+    depends_on:
+      - postgres
+
+  worker:
+    image: nabe-worker:dev
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    env_file: .env
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: nabe
+      POSTGRES_USER: nabe
+      POSTGRES_PASSWORD: change-me-local-only
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

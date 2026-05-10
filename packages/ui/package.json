@@ -1,0 +1,12 @@
+{
+  "name": "@nabe/ui",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "echo \"No ui build yet\"",
+    "lint": "echo \"No ui lint yet\"",
+    "test": "echo \"No ui tests yet\""
+  }
+}
