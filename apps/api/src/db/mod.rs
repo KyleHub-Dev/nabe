@@ -6,6 +6,7 @@ use turso::{Builder, Connection, Database as TursoDatabase};
 use crate::error::ApiError;
 
 const INIT_SQL: &str = include_str!("../../migrations/0001_init.sql");
+const AUTHZ_SQL: &str = include_str!("../../migrations/0002_authz.sql");
 
 pub struct Database {
     _db: TursoDatabase,
@@ -33,6 +34,22 @@ impl Database {
             .await
             .map_err(|error| {
                 tracing::error!(?error, "schema migration insert failed");
+                ApiError::Database
+            })?;
+
+        self.conn.execute_batch(AUTHZ_SQL).await.map_err(|error| {
+            tracing::error!(?error, "authz database migration failed");
+            ApiError::Database
+        })?;
+
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+                ("0002_authz", now()),
+            )
+            .await
+            .map_err(|error| {
+                tracing::error!(?error, "authz schema migration insert failed");
                 ApiError::Database
             })?;
 

@@ -9,6 +9,7 @@ MVP 0 is the first running Nabe version for a self-contained Cloud DNS master st
 - Turso Database Rust-rewrite embedded in the API container with file persistence at `/data/nabe.db`.
 - Zitadel OIDC login handled by the backend using a public PKCE client.
 - Every authenticated Zitadel user maps to the `admin` role.
+- Database schema prepared for global roles, tenant roles, memberships, permissions, and user-owned Device Clients.
 - One AdGuard Home DNS Engine managed through the Nabe API.
 - One local Unbound recursive resolver used by AdGuard Home.
 - Dashboard shows backend session state and live AdGuard engine status.
@@ -19,7 +20,7 @@ MVP 0 is the first running Nabe version for a self-contained Cloud DNS master st
 - No Drizzle ORM.
 - No TypeScript API backend.
 - No Nabe user-management UI.
-- No multi-user permissions beyond `authenticated = admin`.
+- No enforced multi-user permission checks beyond the current MVP admin session.
 - No Speiche deployment flow.
 - No public native AdGuard UI or AdGuard API exposure by default.
 
@@ -33,6 +34,8 @@ The API stores only the minimum local subject cache needed for the MVP:
 - Optional email and display name.
 - Role mapping to `admin`.
 - First and last seen timestamps.
+
+The next authorization model is documented in [authorization.md](authorization.md). MVP 0 includes the schema foundation but does not yet expose tenant management or permission enforcement in the UI.
 
 ## Local Runtime
 

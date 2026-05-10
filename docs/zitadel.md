@@ -75,7 +75,9 @@ The project setting for returning user roles during authentication must also rem
 
 ## Nabe Role Mapping
 
-MVP 0 maps every successful Zitadel login to the Nabe `admin` role. Nabe does not manage users locally in this phase. Zitadel remains the source of truth for who can authenticate.
+MVP 0 maps every successful Zitadel login to the Nabe `admin` role in the backend session. This is a temporary MVP shortcut so the first stack is easy to operate.
+
+The target model is documented in [authorization.md](authorization.md): Zitadel controls who can authenticate, while Nabe stores product authorization through global roles, tenant roles, memberships, and permissions.
 
 Nabe stores only a local subject cache:
 
@@ -98,3 +100,9 @@ SESSION_SECRET=change-this-to-a-local-random-secret
 ```
 
 Use a unique local `SESSION_SECRET`. Do not commit filled `.env` files or real secrets.
+
+## Post-MVP Service Account Automation
+
+After MVP 0, Nabe may use a Zitadel service account to manage the Zitadel-side project setup automatically. This is intentionally not required for the MVP.
+
+The service account would let Nabe verify or create the `nabe` project, the `nabe-web` PKCE application, redirect URIs, post-logout URIs, and project roles. Product permissions should still live in the Nabe database so future auth providers can be supported through provider adapters instead of tying all authorization logic to Zitadel.
