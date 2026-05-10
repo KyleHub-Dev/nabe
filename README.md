@@ -70,6 +70,8 @@ See [docs/git-remotes-and-mirroring.md](docs/git-remotes-and-mirroring.md).
 
 The first real Nabe version is developed against a self-contained Compose stack with Nabe, Turso Database persistence inside the Rust API, AdGuard Home, Unbound, and optional Newt. See [docs/mvp-0.md](docs/mvp-0.md), [docs/mvp-deployment.md](docs/mvp-deployment.md), and [compose.dev.yaml](compose.dev.yaml).
 
+Zitadel setup is documented in [docs/zitadel.md](docs/zitadel.md).
+
 ## Licensing
 
 Nabe uses mixed licensing by package/component:

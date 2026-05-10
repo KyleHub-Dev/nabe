@@ -58,3 +58,5 @@ This deployment shape makes the first MVP concrete:
 3. Nabe handles Zitadel OIDC login/callback in the Rust API.
 4. Nabe Console shows authenticated user and live DNS Engine status.
 5. Newt/Pangolin remains optional for private native UI debugging.
+
+Use [zitadel.md](zitadel.md) for the Zitadel project and `nabe-web` application settings.

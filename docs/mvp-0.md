@@ -45,3 +45,5 @@ The root `compose.dev.yaml` is the MVP runtime target. It runs:
 - optional `dns-newt` profile for future break-glass access
 
 The API persists the Turso database file through the `nabe-data` volume. AdGuard Home and Unbound remain in the same stack so the core DNS path can be tested without a separate external database service.
+
+See [zitadel.md](zitadel.md) for the required Zitadel project, application, redirect URI, logout URI, token, and role settings.
