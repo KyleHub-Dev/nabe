@@ -77,7 +77,11 @@ The project setting for returning user roles during authentication must also rem
 
 MVP 0 maps every successful Zitadel login to the Nabe `admin` role in the backend session. This is a temporary MVP shortcut so the first stack is easy to operate.
 
-The target model is documented in [authorization.md](authorization.md): Zitadel controls who can authenticate, while Nabe stores product authorization through global roles, tenant roles, memberships, and permissions.
+The target model is documented in [authorization.md](authorization.md): Zitadel controls who can authenticate, while Nabe stores product authorization through global roles, tenant groups, tenant roles, memberships, and permissions.
+
+`baseline` is not a Zitadel project role. It is Nabe's implicit status for a signed-in user who has no tenant membership yet.
+
+For tenant access, use a separate tenant group key such as `tenant_gray` and combine it with a tenant role such as `manager`, `user`, or `viewer`.
 
 Nabe stores only a local subject cache:
 

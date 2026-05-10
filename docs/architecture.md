@@ -34,7 +34,7 @@ Native AdGuard UI is not the product UI. It is reserved for private break-glass/
 - Database: Turso Database Rust rewrite.
 - Validation: Zod, shared through `@nabe/validation`.
 - Auth: Zitadel via OIDC handled by the Rust API.
-- Authorization: Nabe-owned global roles, tenant roles, memberships, and fine-grained permissions.
+- Authorization: Nabe-owned global roles, tenant group mappings, tenant roles, memberships, and fine-grained permissions.
 - Edge Agent: Go.
 - CLI: Go.
 - Package manager: pnpm workspaces.

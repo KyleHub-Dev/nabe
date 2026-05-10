@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS tenants (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS tenant_identity_groups (
+  tenant_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  group_key TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (provider, group_key),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS tenant_roles (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
@@ -127,7 +137,7 @@ INSERT OR IGNORE INTO permissions(id, description, scope, created_at) VALUES
 
 INSERT OR IGNORE INTO global_roles(id, name, description, created_at) VALUES
   ('admin', 'admin', 'Platform administrator for Nabe.', '1970-01-01T00:00:00Z'),
-  ('authenticated', 'authenticated', 'Baseline role for authenticated users without tenant membership.', '1970-01-01T00:00:00Z');
+  ('baseline', 'baseline', 'Baseline role for signed-in users without tenant membership.', '1970-01-01T00:00:00Z');
 
 INSERT OR IGNORE INTO global_role_permissions(role_id, permission_id, created_at) VALUES
   ('admin', 'platform.admin', '1970-01-01T00:00:00Z'),
@@ -136,9 +146,9 @@ INSERT OR IGNORE INTO global_role_permissions(role_id, permission_id, created_at
   ('admin', 'device_client.manage_own', '1970-01-01T00:00:00Z'),
   ('admin', 'engine.read', '1970-01-01T00:00:00Z'),
   ('admin', 'engine.manage', '1970-01-01T00:00:00Z'),
-  ('authenticated', 'cloud_dns.use', '1970-01-01T00:00:00Z'),
-  ('authenticated', 'device_client.read_own', '1970-01-01T00:00:00Z'),
-  ('authenticated', 'device_client.manage_own', '1970-01-01T00:00:00Z');
+  ('baseline', 'cloud_dns.use', '1970-01-01T00:00:00Z'),
+  ('baseline', 'device_client.read_own', '1970-01-01T00:00:00Z'),
+  ('baseline', 'device_client.manage_own', '1970-01-01T00:00:00Z');
 
 INSERT OR IGNORE INTO tenant_role_templates(name, description, created_at) VALUES
   ('manager', 'Tenant administrator. Can manage tenant settings, members, Device Clients, and tenant query logs.', '1970-01-01T00:00:00Z'),
