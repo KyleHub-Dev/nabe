@@ -1,13 +1,15 @@
 # Agent Instructions
 
-These instructions apply to the whole repository.
+These instructions apply to the whole repository. They guide future coding agents and human contributors.
 
 ## Product Boundaries
 
-- Nabe is the product: a self-hosted DNS control plane.
+- Nabe is a KyleHub product.
+- Nabe is the product: a central DNS control plane and web platform.
 - Nabe is not a DNS resolver and not an AdGuard fork.
-- AdGuard Home is the first DNS Engine adapter. Treat native AdGuard UI as private break-glass/debug access only.
-- Speiche is a generic Edge Node agent. It must not become AdGuard-specific in naming or architecture.
+- Speiche is the generic Edge Agent and spoke connector for Edge Nodes.
+- AdGuard Home is the first DNS Engine adapter, not the product identity. Treat native AdGuard UI as private break-glass/debug access only.
+- Unbound is a local recursive resolver component per deployment when needed. It is infrastructure, not the product identity.
 - The browser must never receive DNS Engine admin credentials.
 - User-facing logs and stats must be filtered server-side by owned Device Client IDs.
 
@@ -55,9 +57,22 @@ These instructions apply to the whole repository.
 - Browser/system language detection should prefer German unless English is detected.
 - Keep system/light/dark theme support in the UI architecture.
 
+## KyleHub Branding
+
+Follow the KyleHub brand guidance from `https://kylehub.dev/branding.txt`.
+
+- Default identity: quiet one-operator technical surface, not SaaS marketing.
+- Prefer flat, square, hairlined surfaces. Avoid rounded SaaS panels, gradients, blobs, glows, and glassmorphism.
+- Use role tokens such as `--accent`, `--accent-warm`, `--surface`, `--text`, and `--hairline` instead of literal brand colors in component CSS.
+- Use Bloom/Bark/Stone/Lichen/Hairline roles as described by the brand brief when designing product surfaces.
+- Prefer direct copy. Avoid sales-led language and em dashes.
+- Prefer Iconify for icons, with Lucide as the generic UI root set.
+- Document intentional departures near the decision using: `departs from branding.txt section <number>: <reason>`.
+
 ## Security Rules
 
 - Do not commit secrets, filled `.env` files, tokens, passwords, private keys, or credentials.
+- Do not expose secrets through logs, client bundles, screenshots, examples, generated fixtures, or documentation.
 - Keep AdGuard credentials server-side only.
 - Do not expose AdGuard UI or AdGuard API publicly by default.
 - Do not create open-resolver defaults.
@@ -95,6 +110,8 @@ cd apps/cli && go test ./...
 
 ## Implementation Guidance
 
+- Prefer small, composable, boring infrastructure.
+- Do not overbuild beyond the current product phase.
 - Prefer existing package boundaries over adding new packages.
 - Put shared request/response validation in `packages/validation`.
 - Keep DNS Engine integrations behind adapter/client boundaries.
