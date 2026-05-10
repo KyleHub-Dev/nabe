@@ -9,9 +9,10 @@
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
+    "test:go": "cd apps/speiche && go test ./... && cd ../cli && go test ./...",
     "verify": "scripts/verify-repo.sh"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

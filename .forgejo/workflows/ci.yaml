@@ -9,7 +9,7 @@ jobs:
   checks:
     runs-on: docker
     container:
-      image: node:20-bookworm
+      image: node:lts-bookworm
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,3 +18,5 @@ jobs:
       - run: pnpm install --frozen-lockfile=false
       - run: pnpm lint
       - run: pnpm build
+      - run: apt-get update && apt-get install -y golang-go
+      - run: pnpm test:go

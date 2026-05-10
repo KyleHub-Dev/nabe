@@ -10,6 +10,12 @@ importers:
 
   apps/api:
     dependencies:
+      '@nabe/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@nabe/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       fastify:
         specifier: ^5.1.0
         version: 5.8.5
@@ -26,6 +32,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@nabe/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@sveltejs/adapter-auto':
         specifier: ^3.3.1
         version: 3.3.1(@sveltejs/kit@2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21(@types/node@22.19.18)))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21(@types/node@22.19.18)))
@@ -70,7 +79,18 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/auth: {}
+  packages/auth:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.18
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
   packages/config:
     devDependencies:
@@ -98,6 +118,16 @@ importers:
         version: 5.9.3
 
   packages/ui: {}
+
+  packages/validation:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
 packages:
 
@@ -1073,6 +1103,9 @@ packages:
   zimmerframe@1.1.4:
     resolution: {integrity: sha512-B58NGBEoc8Y9MWWCQGl/gq9xBCe4IiKM0a2x7GZdQKOW5Exr8S1W24J6OgM1njK8xCRGvAJIL/MxXHf6SkmQKQ==}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@esbuild/aix-ppc64@0.21.5':
@@ -1790,3 +1823,5 @@ snapshots:
       vite: 5.4.21(@types/node@22.19.18)
 
   zimmerframe@1.1.4: {}
+
+  zod@3.25.76: {}

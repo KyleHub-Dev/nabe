@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { detectLanguage, messages, type Language } from '$lib/i18n';
-
-  type Theme = 'system' | 'light' | 'dark';
+  import { languageSchema, themeSchema, type Theme } from '@nabe/validation';
 
   let language: Language = 'de';
   let theme: Theme = 'system';
@@ -18,8 +17,8 @@
   ] as const;
 
   onMount(() => {
-    language = (localStorage.getItem('nabe-language') as Language | null) ?? detectLanguage();
-    theme = (localStorage.getItem('nabe-theme') as Theme | null) ?? 'system';
+    language = languageSchema.safeParse(localStorage.getItem('nabe-language')).data ?? detectLanguage();
+    theme = themeSchema.safeParse(localStorage.getItem('nabe-theme')).data ?? 'system';
     applyTheme(theme);
   });
 

@@ -14,6 +14,8 @@ for path in \
   apps/api/package.json \
   apps/worker/package.json \
   apps/speiche/go.mod \
+  apps/cli/go.mod \
+  packages/validation/package.json \
   packages/edge-protocol/LICENSE \
   packages/adguard-client/LICENSE \
   packages/db/LICENSE \

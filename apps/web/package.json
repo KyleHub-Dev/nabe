@@ -12,6 +12,7 @@
     "test": "echo \"No web tests yet\""
   },
   "dependencies": {
+    "@nabe/validation": "workspace:*",
     "@sveltejs/adapter-auto": "^3.3.1",
     "@sveltejs/kit": "^2.15.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.4",

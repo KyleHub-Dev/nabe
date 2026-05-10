@@ -1,4 +1,4 @@
-FROM node:20-bookworm
+FROM node:lts-bookworm
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-workspace.yaml ./

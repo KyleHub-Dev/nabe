@@ -1,4 +1,6 @@
 import Fastify from 'fastify';
+import { parseZitadelOidcConfig } from '@nabe/auth';
+import { healthResponseSchema, placeholderRouteResponseSchema } from '@nabe/validation';
 
 const app = Fastify({ logger: true });
 
@@ -13,15 +15,28 @@ const placeholderRoutes = [
 ];
 
 app.get('/health', async () => ({
-  status: 'ok',
-  service: 'nabe-api'
+  ...healthResponseSchema.parse({
+    status: 'ok',
+    service: 'nabe-api'
+  })
 }));
 
 for (const route of placeholderRoutes) {
   app.get(`/v1/${route}`, async () => ({
-    route,
-    status: 'placeholder'
+    ...placeholderRouteResponseSchema.parse({
+      route,
+      status: 'placeholder'
+    })
   }));
+}
+
+if (process.env.OIDC_ISSUER_URL && process.env.OIDC_CLIENT_ID) {
+  parseZitadelOidcConfig({
+    issuerUrl: process.env.OIDC_ISSUER_URL,
+    clientId: process.env.OIDC_CLIENT_ID,
+    clientSecret: process.env.OIDC_CLIENT_SECRET,
+    redirectUri: process.env.OIDC_REDIRECT_URI
+  });
 }
 
 const host = process.env.NABE_API_HOST ?? '0.0.0.0';

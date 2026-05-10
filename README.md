@@ -29,6 +29,7 @@ apps/web          Nabe Console, AGPL-3.0-or-later
 apps/api          Nabe API, AGPL-3.0-or-later
 apps/worker       background jobs, AGPL-3.0-or-later
 apps/speiche      Speiche Agent, Apache-2.0
+apps/cli          Go CLI for admin/operator workflows, Apache-2.0
 packages/*        shared packages with package-level licenses
 deploy/           Docker/Podman Compose skeletons
 docs/             product, architecture, security, and roadmap docs
@@ -49,6 +50,7 @@ The current services are placeholders:
 - API: TypeScript Fastify health and placeholder routes.
 - Worker: TypeScript startup stub with planned job list.
 - Speiche: Go agent stub with outbound-only behavior by default.
+- CLI: Go command stub for future admin/operator workflows.
 
 ## Git Remotes
 

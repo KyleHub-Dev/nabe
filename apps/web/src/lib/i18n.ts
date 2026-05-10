@@ -1,4 +1,6 @@
-export type Language = 'de' | 'en';
+import { languageSchema, type Language } from '@nabe/validation';
+
+export type { Language };
 
 export const messages = {
   de: {
@@ -50,5 +52,5 @@ export function detectLanguage(): Language {
     return 'de';
   }
 
-  return navigator.language.toLowerCase().startsWith('en') ? 'en' : 'de';
+  return languageSchema.parse(navigator.language.toLowerCase().startsWith('en') ? 'en' : 'de');
 }
