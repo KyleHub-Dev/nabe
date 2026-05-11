@@ -1793,6 +1793,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nabe-adguard-adapter"
+version = "0.0.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "nabe-api"
 version = "0.0.0"
 dependencies = [
@@ -1802,6 +1814,7 @@ dependencies = [
  "cookie",
  "hmac",
  "httpmock",
+ "nabe-adguard-adapter",
  "rand 0.8.6",
  "reqwest",
  "serde",

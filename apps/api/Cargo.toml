@@ -10,6 +10,7 @@ axum = "0.8"
 base64 = "0.22"
 cookie = "0.18"
 hmac = "0.12"
+nabe-adguard-adapter = { path = "../../packages/adguard-adapter" }
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }

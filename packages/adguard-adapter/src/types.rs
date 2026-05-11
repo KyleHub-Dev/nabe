@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,13 +34,13 @@ pub struct StatsInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stats {
     #[serde(default)]
-    pub dns_queries: Option<u64>,
+    pub num_dns_queries: Option<u64>,
     #[serde(default)]
-    pub blocked_filtering: Option<u64>,
+    pub num_blocked_filtering: Option<u64>,
     #[serde(default)]
-    pub replaced_safebrowsing: Option<u64>,
+    pub num_replaced_safebrowsing: Option<u64>,
     #[serde(default)]
-    pub replaced_parental: Option<u64>,
+    pub num_replaced_parental: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

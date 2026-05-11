@@ -35,6 +35,7 @@ These instructions apply to the whole repository. They guide future coding agent
 - `apps/speiche`: Speiche Agent, Apache-2.0.
 - `apps/cli`: Nabe CLI, Apache-2.0.
 - `packages/edge-protocol`: shared edge protocol, Apache-2.0.
+- `packages/adguard-adapter`: AdGuard Home engine adapter, Apache-2.0.
 - `packages/validation`: shared Zod schemas, AGPL-3.0-or-later.
 - `packages/config`: shared config loading, Apache-2.0 unless it imports AGPL code.
 - `packages/ui`: shared UI components, AGPL-3.0-or-later.
@@ -86,24 +87,33 @@ Follow the KyleHub brand guidance from `https://kylehub.dev/branding.txt`.
 
 ## Development Checks
 
-Run these before committing meaningful changes:
+Run the full repository gate before committing meaningful changes:
 
 ```sh
 pnpm lint
 pnpm build
-pnpm test:api
-pnpm test:go
-scripts/verify-repo.sh
+pnpm test
+pnpm verify
 ```
 
-Use focused checks while iterating:
+Use focused checks while iterating, based on the files changed:
 
 ```sh
+# Web app or TypeScript workspace packages:
 pnpm --filter @nabe/web lint
-env -u APPIMAGE -u APPDIR cargo test --manifest-path apps/api/Cargo.toml
+pnpm --filter @nabe/web build
+pnpm --filter <package-name> lint
+
+# Rust API:
+env -u APPIMAGE -u APPDIR cargo check --manifest-path apps/api/Cargo.toml
+pnpm test:api
+
+# Go edge agent or CLI:
 cd apps/speiche && go test ./...
 cd apps/cli && go test ./...
 ```
+
+Prefer the narrowest focused check that covers the change during development, then run the full gate once the change is ready. If a focused check fails because of unrelated existing work, note that clearly instead of widening the change.
 
 ## Implementation Guidance
 
@@ -111,6 +121,7 @@ cd apps/cli && go test ./...
 - Do not overbuild beyond the current product phase.
 - Prefer existing package boundaries over adding new packages.
 - Put shared request/response validation in `packages/validation`.
+- Keep engine adapter code in permissive packages such as `packages/adguard-adapter`; do not duplicate AdGuard client logic inside the AGPL API.
 - Keep DNS Engine integrations behind adapter/client boundaries.
 - For MVP deployment work, keep one root-level self-contained `compose.dev.yaml` plus `.env.example`.
 - Do not add separate `deploy/` directories for Nabe or Speiche during MVP 0.

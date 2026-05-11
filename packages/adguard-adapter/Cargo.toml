@@ -1,0 +1,17 @@
+[package]
+name = "nabe-adguard-adapter"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Apache-2.0 AdGuard Home engine adapter for Nabe and Speiche."
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+url = { version = "2", features = ["serde"] }
+
+[dev-dependencies]
+httpmock = "0.7"

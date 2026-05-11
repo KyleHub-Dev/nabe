@@ -1,4 +1,3 @@
-mod adguard;
 mod auth;
 mod config;
 mod db;

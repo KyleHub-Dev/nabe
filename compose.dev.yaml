@@ -57,16 +57,16 @@ services:
       dns-unbound:
         condition: service_started
     ports:
-      # Plain DNS/53 is intentionally not exposed in the dev stack.
-      # DoT/DoH are loopback-only by default.
-      - "${DNS_DOT_BIND:-127.0.0.1:853}:853/tcp"
-      - "${DNS_DOT_BIND:-127.0.0.1:853}:853/udp"
-      - "${DNS_DOH_BIND:-127.0.0.1:4443}:443/tcp"
-      # Native AdGuard UI/API debug binding. Keep loopback-only by default.
+      # Native AdGuard UI/API debug binding for local dev setup and inspection.
       - "${ADGUARD_DEBUG_BIND:-127.0.0.1:3000}:3000/tcp"
+    expose:
+      # AdGuard stays internal to the dev stack by default.
+      - "443/tcp"
+      - "853/tcp"
+      - "853/udp"
     volumes:
-      - dns-adguard-work:/opt/adguardhome/work
-      - dns-adguard-conf:/opt/adguardhome/conf
+      - ./data/config/adguard:/opt/adguardhome/conf:Z
+      - ./data/state/adguard:/opt/adguardhome/work:Z
     environment:
       TZ: ${TZ:-Europe/Berlin}
     networks:
@@ -108,8 +108,4 @@ networks:
 
 volumes:
   nabe-data:
-    driver: local
-  dns-adguard-work:
-    driver: local
-  dns-adguard-conf:
     driver: local

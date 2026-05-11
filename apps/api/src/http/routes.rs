@@ -8,8 +8,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+use nabe_adguard_adapter::AdguardAdapterError;
+
 use crate::{
-    adguard::AdguardError,
     auth::{self, session, Principal},
     error::ApiError,
     state::AppState,
@@ -61,12 +62,12 @@ async fn ready(State(state): State<AppState>) -> Json<ReadyResponse> {
     } else {
         "error"
     };
-    let adguard = match state.adguard.get_status().await {
+    let adguard = match state.adguard.status().await {
         Ok(_) => "ok",
-        Err(AdguardError::NotConfigured) => "not_configured",
-        Err(AdguardError::AuthFailed) => "auth_failed",
-        Err(AdguardError::Unreachable) => "error",
-        Err(AdguardError::BadResponse) => "degraded",
+        Err(AdguardAdapterError::NotConfigured) => "not_configured",
+        Err(AdguardAdapterError::AuthFailed) => "auth_failed",
+        Err(AdguardAdapterError::Unreachable) => "error",
+        Err(AdguardAdapterError::BadResponse) => "degraded",
     };
 
     let status = if database == "ok" && adguard == "ok" {
@@ -113,6 +114,14 @@ async fn auth_callback(
     .await?;
     let subject = auth::oidc::subject_input(&principal);
     state.db.upsert_subject(&subject).await?;
+    tracing::info!(
+        provider = %principal.provider,
+        subject = %principal.subject,
+        email = principal.email.as_deref().unwrap_or(""),
+        display_name = principal.display_name.as_deref().unwrap_or(""),
+        roles = ?principal.roles,
+        "user authenticated"
+    );
 
     let secure = state.config.public_url.scheme() == "https";
     let mut cookies = session::clear_oidc_cookies();
@@ -138,6 +147,14 @@ async fn session_me(
     headers: HeaderMap,
 ) -> Result<Json<SessionResponse>, ApiError> {
     let principal = session::read_principal(&headers, &state.config.session_secret)?;
+    tracing::info!(
+        provider = %principal.provider,
+        subject = %principal.subject,
+        email = principal.email.as_deref().unwrap_or(""),
+        display_name = principal.display_name.as_deref().unwrap_or(""),
+        roles = ?principal.roles,
+        "session read"
+    );
     Ok(Json(SessionResponse {
         authenticated: true,
         principal,
@@ -149,12 +166,20 @@ async fn dashboard(
     headers: HeaderMap,
 ) -> Result<Json<DashboardResponse>, ApiError> {
     let principal = session::read_principal(&headers, &state.config.session_secret)?;
+    tracing::info!(
+        provider = %principal.provider,
+        subject = %principal.subject,
+        email = principal.email.as_deref().unwrap_or(""),
+        display_name = principal.display_name.as_deref().unwrap_or(""),
+        roles = ?principal.roles,
+        "dashboard requested"
+    );
     let engine = load_engine_status(&state).await?;
-    let stats = match state.adguard.get_stats().await {
+    let stats = match state.adguard.stats().await {
         Ok(stats) => DashboardStats {
             available: true,
-            dns_queries: stats.dns_queries.unwrap_or_default(),
-            blocked_filtering: stats.blocked_filtering.unwrap_or_default(),
+            dns_queries: stats.num_dns_queries.unwrap_or_default(),
+            blocked_filtering: stats.num_blocked_filtering.unwrap_or_default(),
         },
         Err(_) => DashboardStats {
             available: false,
@@ -167,6 +192,11 @@ async fn dashboard(
         principal,
         engine,
         stats,
+        adguard: AdguardDebugAccess {
+            url: state.config.adguard_debug_url.as_str().to_string(),
+            username: state.config.adguard_username.clone(),
+            password: state.config.adguard_password.clone(),
+        },
     }))
 }
 
@@ -185,7 +215,7 @@ async fn adguard_status(
     let _ = session::read_principal(&headers, &state.config.session_secret)?;
     state
         .adguard
-        .get_raw("status")
+        .raw_get("status")
         .await
         .map(Json)
         .map_err(map_adguard_error)
@@ -198,7 +228,7 @@ async fn adguard_stats(
     let _ = session::read_principal(&headers, &state.config.session_secret)?;
     state
         .adguard
-        .get_raw("stats")
+        .raw_get("stats")
         .await
         .map(Json)
         .map_err(map_adguard_error)
@@ -211,7 +241,7 @@ async fn adguard_querylog(
     let _ = session::read_principal(&headers, &state.config.session_secret)?;
     state
         .adguard
-        .get_raw("querylog")
+        .raw_get("querylog")
         .await
         .map(Json)
         .map_err(map_adguard_error)
@@ -243,6 +273,7 @@ struct DashboardResponse {
     principal: Principal,
     engine: EngineStatus,
     stats: DashboardStats,
+    adguard: AdguardDebugAccess,
 }
 
 #[derive(Serialize)]
@@ -253,14 +284,19 @@ struct DashboardStats {
     blocked_filtering: u64,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdguardDebugAccess {
+    url: String,
+    username: Option<String>,
+    password: Option<String>,
+}
+
 async fn load_engine_status(state: &AppState) -> Result<EngineStatus, ApiError> {
-    let status = state
-        .adguard
-        .get_status()
-        .await
-        .map_err(map_adguard_error)?;
-    let querylog = state.adguard.get_querylog_info().await.ok();
-    let stats = state.adguard.get_stats_info().await.ok();
+    let status = state.adguard.status().await.map_err(map_adguard_error)?;
+    let querylog = state.adguard.querylog_info().await.ok();
+    let stats = state.adguard.stats_info().await.ok();
+    let statistics_enabled = stats.is_some();
 
     Ok(EngineStatus {
         kind: "adguard-home",
@@ -269,19 +305,19 @@ async fn load_engine_status(state: &AppState) -> Result<EngineStatus, ApiError> 
         version: status.version,
         protection_enabled: status.protection_enabled.unwrap_or(false),
         query_log_enabled: querylog.and_then(|value| value.enabled).unwrap_or(false),
-        statistics_enabled: stats.and_then(|value| value.enabled).unwrap_or(false),
+        statistics_enabled,
         last_checked_at: OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string()),
     })
 }
 
-fn map_adguard_error(error: AdguardError) -> ApiError {
+fn map_adguard_error(error: AdguardAdapterError) -> ApiError {
     match error {
-        AdguardError::NotConfigured => ApiError::AdguardNotConfigured,
-        AdguardError::AuthFailed => ApiError::AdguardAuthFailed,
-        AdguardError::Unreachable => ApiError::AdguardUnreachable,
-        AdguardError::BadResponse => ApiError::BadUpstreamResponse,
+        AdguardAdapterError::NotConfigured => ApiError::AdguardNotConfigured,
+        AdguardAdapterError::AuthFailed => ApiError::AdguardAuthFailed,
+        AdguardAdapterError::Unreachable => ApiError::AdguardUnreachable,
+        AdguardAdapterError::BadResponse => ApiError::BadUpstreamResponse,
     }
 }
 

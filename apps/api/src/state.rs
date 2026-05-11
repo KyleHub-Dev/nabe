@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
-use crate::{adguard::AdguardClient, config::Config, db::Database};
+use nabe_adguard_adapter::{AdguardAdapter, Credentials};
+
+use crate::{config::Config, db::Database};
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
     pub db: Arc<Database>,
-    pub adguard: AdguardClient,
+    pub adguard: AdguardAdapter,
 }
 
 impl AppState {
@@ -20,11 +22,14 @@ impl AppState {
         )
         .await?;
 
-        let adguard = AdguardClient::new(
-            config.adguard_base_url.clone(),
+        let credentials = match (
             config.adguard_username.clone(),
             config.adguard_password.clone(),
-        );
+        ) {
+            (Some(username), Some(password)) => Some(Credentials::new(username, password)),
+            _ => None,
+        };
+        let adguard = AdguardAdapter::new(config.adguard_base_url.clone(), credentials);
 
         Ok(Self {
             config,

@@ -26,3 +26,5 @@ Thumbs.db
 tmp/
 logs/
 *.log
+
+data/state/

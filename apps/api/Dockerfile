@@ -1,10 +1,11 @@
 FROM rust:1-bookworm AS build
-WORKDIR /src/apps/api
-COPY apps/api/Cargo.toml ./
-COPY apps/api/Cargo.lock ./
-COPY apps/api/src src
-COPY apps/api/migrations migrations
-RUN cargo build --release
+WORKDIR /src
+COPY apps/api/Cargo.toml apps/api/Cargo.toml
+COPY apps/api/Cargo.lock apps/api/Cargo.lock
+COPY apps/api/src apps/api/src
+COPY apps/api/migrations apps/api/migrations
+COPY packages/adguard-adapter packages/adguard-adapter
+RUN cargo build --release --manifest-path apps/api/Cargo.toml
 
 FROM debian:bookworm-slim
 RUN apt-get update \
