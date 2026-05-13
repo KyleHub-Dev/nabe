@@ -54,6 +54,22 @@ Sudo: passwordless
 Do not commit SSH passwords, tokens, filled `.env` files, host keys, private
 keys, or generated credentials.
 
+For this local workstation, SSH credentials for the real Pi target are stored
+in the ignored file `.env.goal-edge.local`. Source it before running Pi
+verification commands:
+
+```sh
+set -a
+. ./.env.goal-edge.local
+set +a
+```
+
+Then use `sshpass` without writing the password into commands or docs:
+
+```sh
+SSHPASS="$NABE_EDGE_SSH_PASSWORD" sshpass -e ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'hostname'
+```
+
 ## Current Dev Central
 
 The local central API must be reachable from the Pi over the LAN. On this
@@ -237,4 +253,3 @@ Stop only when one of these is true:
 - The run is blocked by one concrete external prerequisite that Codex cannot
   satisfy from the repository or over SSH, and the blocker is documented with
   the exact command/output that proves it.
-
