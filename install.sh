@@ -39,7 +39,7 @@ if [ -z "$src" ]; then
 fi
 
 cli_dir="$(dirname "$src")"
-bin="$tmp/nabe"
+bin="$tmp/nabe-cli"
 (cd "$cli_dir" && go build -o "$bin" .)
 install_dir="$(dirname "$INSTALL_PATH")"
 if [ -w "$install_dir" ]; then
