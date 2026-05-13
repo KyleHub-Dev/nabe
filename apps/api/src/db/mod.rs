@@ -54,10 +54,13 @@ impl Database {
                 ApiError::Database
             })?;
 
-        self.conn.execute_batch(EDGE_NODES_SQL).await.map_err(|error| {
-            tracing::error!(?error, "edge node database migration failed");
-            ApiError::Database
-        })?;
+        self.conn
+            .execute_batch(EDGE_NODES_SQL)
+            .await
+            .map_err(|error| {
+                tracing::error!(?error, "edge node database migration failed");
+                ApiError::Database
+            })?;
 
         self.conn
             .execute(

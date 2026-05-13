@@ -16,6 +16,9 @@ pub struct Config {
     pub adguard_username: Option<String>,
     pub adguard_password: Option<String>,
     pub dev_edge_token: Option<String>,
+    pub edge_heartbeat_interval_seconds: i64,
+    pub edge_stale_after_intervals: i64,
+    pub edge_offline_after_intervals: i64,
     pub oidc_issuer_url: Url,
     pub oidc_client_id: Option<String>,
     pub oidc_redirect_uri: Url,
@@ -44,6 +47,9 @@ impl Config {
             adguard_username: env_opt("ADGUARD_USERNAME"),
             adguard_password: env_opt("ADGUARD_PASSWORD"),
             dev_edge_token: env_opt("NABE_DEV_EDGE_TOKEN"),
+            edge_heartbeat_interval_seconds: env_i64("NABE_EDGE_HEARTBEAT_INTERVAL_SECONDS", 30)?,
+            edge_stale_after_intervals: env_i64("NABE_EDGE_STALE_AFTER_INTERVALS", 3)?,
+            edge_offline_after_intervals: env_i64("NABE_EDGE_OFFLINE_AFTER_INTERVALS", 10)?,
             oidc_issuer_url: parse_url("OIDC_ISSUER_URL", "https://auth.kylehub.dev")?,
             oidc_client_id: env_opt("OIDC_CLIENT_ID"),
             oidc_redirect_uri,
@@ -61,6 +67,12 @@ fn env_or(key: &str, fallback: &str) -> String {
 
 fn env_opt(key: &str) -> Option<String> {
     env::var(key).ok().filter(|value| !value.trim().is_empty())
+}
+
+fn env_i64(key: &str, fallback: i64) -> anyhow::Result<i64> {
+    env_or(key, &fallback.to_string())
+        .parse()
+        .with_context(|| format!("{key} must be an integer"))
 }
 
 fn parse_url(key: &str, fallback: &str) -> anyhow::Result<Url> {

@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 
 use nabe_adguard_adapter::AdguardAdapterError;
 
@@ -250,7 +250,9 @@ async fn adguard_querylog(
         .map_err(map_adguard_error)
 }
 
-async fn dev_edge_token(State(state): State<AppState>) -> Result<Json<DevEdgeTokenResponse>, ApiError> {
+async fn dev_edge_token(
+    State(state): State<AppState>,
+) -> Result<Json<DevEdgeTokenResponse>, ApiError> {
     Ok(Json(DevEdgeTokenResponse {
         configured: state.config.dev_edge_token.is_some(),
         token: state.config.dev_edge_token.clone(),
@@ -259,13 +261,14 @@ async fn dev_edge_token(State(state): State<AppState>) -> Result<Json<DevEdgeTok
 }
 
 async fn edge_nodes(State(state): State<AppState>) -> Result<Json<EdgeNodesResponse>, ApiError> {
+    let config = state.config.clone();
     Ok(Json(EdgeNodesResponse {
         nodes: state
             .db
             .list_edge_nodes()
             .await?
             .into_iter()
-            .map(EdgeNodeResponse::from)
+            .map(|record| EdgeNodeResponse::from_record(record, &config))
             .collect(),
     }))
 }
@@ -277,7 +280,7 @@ async fn edge_enroll(
 ) -> Result<Json<EdgeNodeResponse>, ApiError> {
     verify_edge_token(&state, &headers)?;
     let node = upsert_edge_node(&state, request).await?;
-    Ok(Json(node.into()))
+    Ok(Json(EdgeNodeResponse::from_record(node, &state.config)))
 }
 
 async fn edge_heartbeat(
@@ -287,7 +290,7 @@ async fn edge_heartbeat(
 ) -> Result<Json<EdgeNodeResponse>, ApiError> {
     verify_edge_token(&state, &headers)?;
     let node = upsert_edge_node(&state, request).await?;
-    Ok(Json(node.into()))
+    Ok(Json(EdgeNodeResponse::from_record(node, &state.config)))
 }
 
 async fn upsert_edge_node(
@@ -322,7 +325,11 @@ async fn upsert_edge_node(
 }
 
 fn verify_edge_token(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
-    let expected = state.config.dev_edge_token.as_deref().ok_or(ApiError::Forbidden)?;
+    let expected = state
+        .config
+        .dev_edge_token
+        .as_deref()
+        .ok_or(ApiError::Forbidden)?;
     let provided = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
@@ -428,12 +435,13 @@ struct EdgeNodeResponse {
     last_seen_at: String,
 }
 
-impl From<EdgeNodeRecord> for EdgeNodeResponse {
-    fn from(record: EdgeNodeRecord) -> Self {
+impl EdgeNodeResponse {
+    fn from_record(record: EdgeNodeRecord, config: &crate::config::Config) -> Self {
         let inventory = record
             .inventory_json
             .as_deref()
             .and_then(|value| serde_json::from_str(value).ok());
+        let health_status = effective_edge_health_status(&record, config);
         Self {
             node_id: record.id,
             node_name: record.name,
@@ -442,11 +450,32 @@ impl From<EdgeNodeRecord> for EdgeNodeResponse {
             os: record.os,
             kernel: record.kernel,
             speiche_version: record.speiche_version,
-            health_status: record.health_status,
+            health_status,
             inventory,
             enrolled_at: record.enrolled_at,
             last_seen_at: record.last_seen_at,
         }
+    }
+}
+
+fn effective_edge_health_status(record: &EdgeNodeRecord, config: &crate::config::Config) -> String {
+    let Ok(last_seen_at) = OffsetDateTime::parse(
+        &record.last_seen_at,
+        &time::format_description::well_known::Rfc3339,
+    ) else {
+        return "stale".to_string();
+    };
+    let age = OffsetDateTime::now_utc() - last_seen_at;
+    let heartbeat = config.edge_heartbeat_interval_seconds.max(5);
+    let stale_after = heartbeat * config.edge_stale_after_intervals.max(1);
+    let offline_after = heartbeat * config.edge_offline_after_intervals.max(1);
+
+    if age >= Duration::seconds(offline_after) {
+        "offline".to_string()
+    } else if age >= Duration::seconds(stale_after) {
+        "stale".to_string()
+    } else {
+        record.health_status.clone()
     }
 }
 

@@ -29,8 +29,6 @@
     };
     adguard: {
       url: string;
-      username?: string;
-      password?: string;
     };
   };
 
@@ -45,8 +43,8 @@
   const apiUrl = import.meta.env.VITE_NABE_API_URL ?? 'http://localhost:8080';
   const copy = {
     de: {
-      eyebrow: '01/KyleHub DNS Control Plane',
-      lead: 'Eine ruhige Konsole für Cloud-DNS, Device Clients und die verbundene DNS Engine.',
+      eyebrow: 'KyleHub DNS',
+      lead: 'Ruhige Konsole für Cloud-DNS, Device Clients und die verbundene DNS Engine.',
       login: 'Mit Zitadel anmelden',
       checking: 'Session wird geprüft',
       overview: 'Übersicht',
@@ -66,16 +64,24 @@
       checked: 'Zuletzt geprüft',
       devAccess: 'Dev Zugang',
       local: 'lokal',
-      user: 'Benutzer',
-      password: 'Passwort',
       roles: 'Rollen',
       logout: 'Abmelden',
       console: 'Konsole',
-      themeLabel: 'Darstellung wechseln'
+      themeLabel: 'Darstellung wechseln',
+      devicesActive: 'Geräte aktiv',
+      systemOverview: 'System',
+      devices: 'Geräte',
+      nextTasks: 'Nächste Aufgaben',
+      placeholder: 'geplant',
+      cloudDnsStats: 'Cloud-DNS Status',
+      globalStats: 'Übersicht Status',
+      filterProtection: 'Filter & Schutz',
+      clientsTokens: 'Clients & Tokens',
+      upstreamDns: 'Upstream & DNS'
     },
     en: {
-      eyebrow: '01/KyleHub DNS Control Plane',
-      lead: 'A quiet console for Cloud DNS, Device Clients, and the connected DNS Engine.',
+      eyebrow: 'KyleHub DNS',
+      lead: 'Quiet console for Cloud DNS, Device Clients, and the connected DNS Engine.',
       login: 'Sign in with Zitadel',
       checking: 'Checking session',
       overview: 'Overview',
@@ -95,12 +101,20 @@
       checked: 'Last checked',
       devAccess: 'Dev access',
       local: 'local',
-      user: 'User',
-      password: 'Password',
       roles: 'Roles',
       logout: 'Sign out',
       console: 'Console',
-      themeLabel: 'Switch theme'
+      themeLabel: 'Switch theme',
+      devicesActive: 'Devices active',
+      systemOverview: 'System',
+      devices: 'Devices',
+      nextTasks: 'Next tasks',
+      placeholder: 'planned',
+      cloudDnsStats: 'Cloud DNS status',
+      globalStats: 'Overview status',
+      filterProtection: 'Filter & protection',
+      clientsTokens: 'Clients & tokens',
+      upstreamDns: 'Upstream & DNS'
     }
   } as const;
 
@@ -112,6 +126,7 @@
     dashboard?.principal.displayName ?? dashboard?.principal.email ?? dashboard?.principal.subject ?? '';
   $: text = copy[language];
   $: nextTheme = (theme === 'dark' ? 'light' : 'dark') as Theme;
+  $: themeGlyph = theme === 'dark' ? '☼' : '◐';
   $: activeClients = dashboard?.stats.available && dashboard.stats.dnsQueries > 0 ? 1 : 0;
 
   onMount(() => {
@@ -176,14 +191,14 @@
 {#if !dashboard}
   <main class="landing">
     <header class="landing-bar">
-      <strong class="wordmark">Nabe</strong>
+      <strong class="wordmark" aria-label="KyleHub">Kyle</strong>
       <div class="chrome">
         <div class="language-tray" aria-label="Language">
           <button class:active={language === 'de'} type="button" on:click={() => setLanguage('de')}>DE</button>
           <button class:active={language === 'en'} type="button" on:click={() => setLanguage('en')}>EN</button>
         </div>
         <button class="theme-button" type="button" aria-label={text.themeLabel} on:click={() => setTheme(nextTheme)}>
-          {theme === 'dark' ? '☼' : '●'}
+          {themeGlyph}
         </button>
       </div>
     </header>
@@ -205,7 +220,7 @@
 {:else}
   <main class="console">
     <aside class="rail">
-      <div class="mark wordmark">Nabe</div>
+      <div class="mark wordmark" aria-label="KyleHub">Kyle</div>
       <nav aria-label={text.console}>
         <button type="button" class:active={view === 'overview'} on:click={() => (view = 'overview')}>{text.overview}</button>
         <button type="button" class:active={view === 'cloudDns'} on:click={() => (view = 'cloudDns')}>Cloud-DNS</button>
@@ -217,7 +232,7 @@
           <button class:active={language === 'en'} type="button" on:click={() => setLanguage('en')}>EN</button>
         </div>
         <button class="theme-button" type="button" aria-label={text.themeLabel} on:click={() => setTheme(nextTheme)}>
-          {theme === 'dark' ? '☼' : '●'}
+          {themeGlyph}
         </button>
       </div>
     </aside>
@@ -225,7 +240,7 @@
     <section class="workspace">
       <header class="console-top">
         <div>
-          <p class="eyebrow">{view === 'overview' ? '01/Übersicht' : '02/Cloud-DNS'}</p>
+          <p class="eyebrow">{view === 'overview' ? text.overview : 'Cloud-DNS'}</p>
           <h1>{view === 'overview' ? text.overview : 'Cloud-DNS'}</h1>
         </div>
         <div class="session">
@@ -235,7 +250,7 @@
       </header>
 
       {#if view === 'overview'}
-        <section class="metrics" aria-label="Globale Statistiken">
+        <section class="metrics" aria-label={text.globalStats}>
           <article>
             <span>{text.status}</span>
             <strong>{dashboard.engine.connected ? text.connected : text.disconnected}</strong>
@@ -249,7 +264,7 @@
             <strong>{dashboard.stats.available ? dashboard.stats.blockedFiltering.toLocaleString('de-DE') : 'n/a'}</strong>
           </article>
           <article>
-            <span>Geräte aktiv</span>
+            <span>{text.devicesActive}</span>
             <strong>{activeClients}</strong>
           </article>
         </section>
@@ -257,7 +272,7 @@
         <section class="overview-grid">
           <article class="panel wide">
             <div class="panel-head">
-              <h2>Systemüberblick</h2>
+              <h2>{text.systemOverview}</h2>
               <span>{new Date(dashboard.engine.lastCheckedAt).toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}</span>
             </div>
             <div class="signal-list">
@@ -270,19 +285,19 @@
 
           <article class="panel">
             <div class="panel-head">
-              <h2>Geräte</h2>
-              <span>mock</span>
+              <h2>{text.devices}</h2>
+              <span>{text.placeholder}</span>
             </div>
             <ul class="plain-list">
               <li><span>Kyles Laptop</span><strong>Cloud-DNS</strong></li>
-              <li><span>Telefon</span><strong>wartet auf Token</strong></li>
-              <li><span>Home Router</span><strong>geplant</strong></li>
+              <li><span>Telefon</span><strong>{language === 'de' ? 'wartet auf Token' : 'waiting for token'}</strong></li>
+              <li><span>Home Router</span><strong>{text.placeholder}</strong></li>
             </ul>
           </article>
 
           <article class="panel">
             <div class="panel-head">
-              <h2>Nächste Aufgaben</h2>
+              <h2>{text.nextTasks}</h2>
               <span>MVP</span>
             </div>
             <ul class="plain-list">
@@ -293,7 +308,7 @@
           </article>
         </section>
       {:else}
-        <section class="metrics" aria-label="Cloud-DNS Statistiken">
+        <section class="metrics" aria-label={text.cloudDnsStats}>
           <article>
             <span>{text.protection}</span>
             <strong>{dashboard.engine.protectionEnabled ? text.active : text.inactive}</strong>
@@ -315,8 +330,8 @@
         <section class="cloud-grid">
           <article class="panel">
             <div class="panel-head">
-              <h2>Filter & Schutz</h2>
-              <span>mock</span>
+              <h2>{text.filterProtection}</h2>
+              <span>{text.placeholder}</span>
             </div>
             <ul class="plain-list">
               <li><span>DNS-Filter</span><strong>aktiv</strong></li>
@@ -328,7 +343,7 @@
 
           <article class="panel">
             <div class="panel-head">
-              <h2>Clients & Tokens</h2>
+              <h2>{text.clientsTokens}</h2>
               <span>RBAC</span>
             </div>
             <ul class="plain-list">
@@ -341,7 +356,7 @@
 
           <article class="panel">
             <div class="panel-head">
-              <h2>Upstream & DNS</h2>
+              <h2>{text.upstreamDns}</h2>
               <span>Unbound</span>
             </div>
             <dl>
@@ -359,8 +374,6 @@
             </div>
             <dl>
               <div><dt>URL</dt><dd><a class="inline-link" href={dashboard.adguard.url} target="_blank" rel="noreferrer">{dashboard.adguard.url}</a></dd></div>
-              <div><dt>{text.user}</dt><dd>{dashboard.adguard.username ?? 'n/a'}</dd></div>
-              <div><dt>{text.password}</dt><dd>{dashboard.adguard.password ?? 'n/a'}</dd></div>
               <div><dt>{text.roles}</dt><dd>{dashboard.principal.roles.join(', ')}</dd></div>
             </dl>
           </article>

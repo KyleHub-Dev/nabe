@@ -29,6 +29,14 @@ func main() {
 	if err != nil || interval < 5 {
 		interval = 30
 	}
+	maxInterval, err := strconv.Atoi(cfg.MaxIntervalSeconds)
+	if err != nil || maxInterval < interval {
+		maxInterval = 300
+	}
+	backoffAfter, err := strconv.Atoi(cfg.FailureBackoffAfter)
+	if err != nil || backoffAfter < 1 {
+		backoffAfter = 3
+	}
 
 	log.Printf("speiche starting: node=%s api=%s public_server=false", cfg.NodeName, cfg.NabeAPIURL)
 	if len(os.Args) > 1 && os.Args[1] == "version" {
@@ -41,6 +49,8 @@ func main() {
 		log.Fatalf("identity setup failed: %v", err)
 	}
 
+	currentInterval := interval
+	consecutiveFailures := 0
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		report := buildReport(ctx, cfg, identity.NodeID, driver)
@@ -56,12 +66,30 @@ func main() {
 		}
 		cancel()
 		if err != nil {
-			log.Printf("heartbeat failed: %v", err)
+			consecutiveFailures++
+			currentInterval = nextHeartbeatInterval(currentInterval, maxInterval, backoffAfter, consecutiveFailures)
+			log.Printf("heartbeat failed: %v; failures=%d next_sleep=%s", err, consecutiveFailures, time.Duration(currentInterval)*time.Second)
 		} else {
+			if consecutiveFailures > 0 || currentInterval != interval {
+				log.Printf("heartbeat recovered after %d failures; reset_sleep=%s", consecutiveFailures, time.Duration(interval)*time.Second)
+			}
+			consecutiveFailures = 0
+			currentInterval = interval
 			log.Printf("heartbeat ok: node=%s status=%s last_seen=%s", response.NodeID, response.HealthStatus, response.LastSeenAt)
 		}
-		time.Sleep(time.Duration(interval) * time.Second)
+		time.Sleep(time.Duration(currentInterval) * time.Second)
 	}
+}
+
+func nextHeartbeatInterval(current int, max int, backoffAfter int, consecutiveFailures int) int {
+	if consecutiveFailures < backoffAfter || current >= max {
+		return current
+	}
+	next := current * 2
+	if next > max {
+		return max
+	}
+	return next
 }
 
 type identityFile struct {

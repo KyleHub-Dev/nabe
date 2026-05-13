@@ -35,7 +35,24 @@ func TestUnboundConfigUsesExplicitPort(t *testing.T) {
 }
 
 func TestAdGuardHomeConfigBindsUIToLoopback(t *testing.T) {
-	if !strings.Contains(adGuardHomeConfig, "address: 127.0.0.1:3000") {
+	if !strings.Contains(adGuardHomeConfig("127.0.0.1:3000"), "address: 127.0.0.1:3000") {
 		t.Fatalf("AdGuard Home UI must bind to loopback only")
+	}
+}
+
+func TestAdGuardHomeConfigAllowsExplicitPublicUIBind(t *testing.T) {
+	if !strings.Contains(adGuardHomeConfig("0.0.0.0:3000"), "address: 0.0.0.0:3000") {
+		t.Fatalf("AdGuard Home UI should use explicit bind address")
+	}
+}
+
+func TestValidateEdgeOptionsRejectsInvalidUIBind(t *testing.T) {
+	err := validateEdgeOptions(edgeInstallOptions{
+		Remote:        "http://10.0.0.230:8080",
+		Token:         "token",
+		AdGuardUIBind: "3000",
+	})
+	if err == nil {
+		t.Fatalf("expected invalid UI bind to be rejected")
 	}
 }

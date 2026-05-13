@@ -42,12 +42,13 @@ func Run(args []string, cfg config.Config) error {
 }
 
 func usage() error {
-	return errors.New("usage: nabe <version|status|install --edge --remote <url> --token <token>>")
+	return errors.New("usage: nabe <version|status|install --edge --remote <url> --token <token> [--adguard-ui-bind <addr:port>]>")
 }
 
 type edgeInstallOptions struct {
-	Remote string
-	Token  string
+	Remote        string
+	Token         string
+	AdGuardUIBind string
 }
 
 type hostFacts struct {
@@ -64,13 +65,14 @@ func runInstall(args []string) error {
 	edge := flags.Bool("edge", false, "install as an edge DNS node")
 	remote := flags.String("remote", "", "Nabe central API URL")
 	token := flags.String("token", "", "dev edge token")
+	adGuardUIBind := flags.String("adguard-ui-bind", "127.0.0.1:3000", "AdGuard Home UI/API bind address")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if !*edge {
 		return errors.New("only edge installation is supported: pass --edge")
 	}
-	opts := edgeInstallOptions{Remote: *remote, Token: *token}
+	opts := edgeInstallOptions{Remote: *remote, Token: *token, AdGuardUIBind: *adGuardUIBind}
 	if err := validateEdgeOptions(opts); err != nil {
 		return err
 	}
@@ -108,6 +110,9 @@ func runInstall(args []string) error {
 }
 
 func validateEdgeOptions(opts edgeInstallOptions) error {
+	if strings.TrimSpace(opts.AdGuardUIBind) == "" {
+		opts.AdGuardUIBind = "127.0.0.1:3000"
+	}
 	if strings.TrimSpace(opts.Remote) == "" {
 		return errors.New("--remote is required")
 	}
@@ -121,6 +126,27 @@ func validateEdgeOptions(opts edgeInstallOptions) error {
 	host := strings.ToLower(parsed.Hostname())
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return errors.New("--remote must not point at localhost in edge mode")
+	}
+	if err := validateBindAddress(opts.AdGuardUIBind); err != nil {
+		return fmt.Errorf("--adguard-ui-bind: %w", err)
+	}
+	return nil
+}
+
+func validateBindAddress(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return errors.New("must not be empty")
+	}
+	host, port, err := net.SplitHostPort(value)
+	if err != nil {
+		return errors.New("must be in host:port form")
+	}
+	if strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {
+		return errors.New("must include host and port")
+	}
+	if net.ParseIP(host) == nil && host != "localhost" {
+		return errors.New("host must be an IP address or localhost")
 	}
 	return nil
 }
@@ -183,7 +209,7 @@ const unboundConfig = `server:
   qname-minimisation: yes
 `
 
-func installAdGuardHome(edgeInstallOptions, hostFacts) error {
+func installAdGuardHome(opts edgeInstallOptions, facts hostFacts) error {
 	if _, err := os.Stat("/opt/AdGuardHome/AdGuardHome"); os.IsNotExist(err) {
 		tmp, err := os.MkdirTemp("", "nabe-adguard-*")
 		if err != nil {
@@ -212,7 +238,7 @@ func installAdGuardHome(edgeInstallOptions, hostFacts) error {
 			return err
 		}
 	}
-	config := adGuardHomeConfig
+	config := adGuardHomeConfig(opts.AdGuardUIBind)
 	if err := writeRootFile("/opt/AdGuardHome/AdGuardHome.yaml", config, "0600"); err != nil {
 		return err
 	}
@@ -222,8 +248,9 @@ func installAdGuardHome(edgeInstallOptions, hostFacts) error {
 	return run("sudo", "systemctl", "restart", "AdGuardHome")
 }
 
-const adGuardHomeConfig = `http:
-  address: 127.0.0.1:3000
+func adGuardHomeConfig(uiBind string) string {
+	return fmt.Sprintf(`http:
+  address: %s
 users: []
 auth_attempts: 5
 block_auth_min: 15
@@ -247,7 +274,8 @@ filters: []
 user_rules:
   - "||blocked.nabe.test^"
 schema_version: 29
-`
+`, uiBind)
+}
 
 func installSpeiche(edgeInstallOptions, hostFacts) error {
 	tmp, err := os.MkdirTemp("", "nabe-source-*")
@@ -289,6 +317,8 @@ SPEICHE_ENROLLMENT_TOKEN=%s
 ADGUARD_BASE_URL=http://127.0.0.1:3000
 SPEICHE_STATE_DIR=/var/lib/nabe/speiche
 SPEICHE_HEARTBEAT_INTERVAL_SECONDS=30
+SPEICHE_HEARTBEAT_BACKOFF_AFTER_FAILURES=3
+SPEICHE_HEARTBEAT_MAX_INTERVAL_SECONDS=300
 `, shellValue(hostname), shellValue(opts.Remote), shellValue(opts.Token))
 	if err := writeRootFile("/etc/nabe/speiche.env", env, "0600"); err != nil {
 		return err
