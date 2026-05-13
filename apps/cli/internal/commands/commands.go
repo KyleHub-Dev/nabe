@@ -160,8 +160,19 @@ func createNabeDirectories(edgeInstallOptions, hostFacts) error {
 }
 
 func configureUnbound(edgeInstallOptions, hostFacts) error {
-	const config = `server:
-  interface: 127.0.0.1@5335
+	const config = unboundConfig
+	if err := writeRootFile("/etc/unbound/unbound.conf.d/nabe-edge.conf", config, "0644"); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "enable", "unbound"); err != nil {
+		return err
+	}
+	return run("sudo", "systemctl", "restart", "unbound")
+}
+
+const unboundConfig = `server:
+  interface: 127.0.0.1
+  port: 5335
   access-control: 127.0.0.0/8 allow
   do-ip4: yes
   do-ip6: yes
@@ -171,11 +182,6 @@ func configureUnbound(edgeInstallOptions, hostFacts) error {
   hide-version: yes
   qname-minimisation: yes
 `
-	if err := writeRootFile("/etc/unbound/unbound.conf.d/nabe-edge.conf", config, "0644"); err != nil {
-		return err
-	}
-	return run("sudo", "systemctl", "enable", "--now", "unbound")
-}
 
 func installAdGuardHome(edgeInstallOptions, hostFacts) error {
 	if _, err := os.Stat("/opt/AdGuardHome/AdGuardHome"); os.IsNotExist(err) {

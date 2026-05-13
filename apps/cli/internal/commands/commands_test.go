@@ -1,6 +1,9 @@
 package commands
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateEdgeOptionsRejectsLocalhost(t *testing.T) {
 	cases := []string{
@@ -22,5 +25,11 @@ func TestValidateEdgeOptionsAcceptsLanRemote(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("expected LAN remote to be accepted: %v", err)
+	}
+}
+
+func TestUnboundConfigUsesExplicitPort(t *testing.T) {
+	if !strings.Contains(unboundConfig, "interface: 127.0.0.1\n  port: 5335") {
+		t.Fatalf("unbound config must bind the local resolver on 127.0.0.1:5335")
 	}
 }
