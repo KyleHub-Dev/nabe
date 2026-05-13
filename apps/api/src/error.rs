@@ -22,6 +22,12 @@ pub enum ApiError {
     AdguardUnreachable,
     #[error("bad upstream response")]
     BadUpstreamResponse,
+    #[error("bad request")]
+    BadRequest,
+    #[error("forbidden")]
+    Forbidden,
+    #[error("not found")]
+    NotFound,
     #[error("database error")]
     Database,
     #[error("internal server error")]
@@ -49,6 +55,9 @@ impl ApiError {
             Self::AdguardNotConfigured => "adguard_not_configured",
             Self::AdguardUnreachable => "adguard_unreachable",
             Self::BadUpstreamResponse => "bad_upstream_response",
+            Self::BadRequest => "bad_request",
+            Self::Forbidden => "forbidden",
+            Self::NotFound => "not_found",
             Self::Database => "database_error",
             Self::Internal => "internal_error",
         }
@@ -60,6 +69,9 @@ impl ApiError {
             Self::OidcNotConfigured | Self::AdguardNotConfigured => StatusCode::SERVICE_UNAVAILABLE,
             Self::AdguardAuthFailed => StatusCode::BAD_GATEWAY,
             Self::AdguardUnreachable | Self::BadUpstreamResponse => StatusCode::BAD_GATEWAY,
+            Self::BadRequest => StatusCode::BAD_REQUEST,
+            Self::Forbidden => StatusCode::FORBIDDEN,
+            Self::NotFound => StatusCode::NOT_FOUND,
             Self::Database | Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

@@ -12,6 +12,7 @@ use nabe_adguard_adapter::AdguardAdapterError;
 
 use crate::{
     auth::{self, session, Principal},
+    db::repositories::{EdgeNodeInput, EdgeNodeRecord},
     error::ApiError,
     state::AppState,
 };
@@ -29,6 +30,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/engine/adguard/status", get(adguard_status))
         .route("/api/engine/adguard/stats", get(adguard_stats))
         .route("/api/engine/adguard/querylog", get(adguard_querylog))
+        .route("/api/dev/edge-token", get(dev_edge_token))
+        .route("/api/edge/enroll", post(edge_enroll))
+        .route("/api/edge/heartbeat", post(edge_heartbeat))
+        .route("/api/edge/nodes", get(edge_nodes))
 }
 
 #[derive(Serialize)]
@@ -247,6 +252,97 @@ async fn adguard_querylog(
         .map_err(map_adguard_error)
 }
 
+async fn dev_edge_token(State(state): State<AppState>) -> Result<Json<DevEdgeTokenResponse>, ApiError> {
+    Ok(Json(DevEdgeTokenResponse {
+        configured: state.config.dev_edge_token.is_some(),
+        token: state.config.dev_edge_token.clone(),
+        warning: "dev-only bootstrap token; do not use for production enrollment",
+    }))
+}
+
+async fn edge_nodes(State(state): State<AppState>) -> Result<Json<EdgeNodesResponse>, ApiError> {
+    Ok(Json(EdgeNodesResponse {
+        nodes: state
+            .db
+            .list_edge_nodes()
+            .await?
+            .into_iter()
+            .map(EdgeNodeResponse::from)
+            .collect(),
+    }))
+}
+
+async fn edge_enroll(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<EdgeNodeRequest>,
+) -> Result<Json<EdgeNodeResponse>, ApiError> {
+    verify_edge_token(&state, &headers)?;
+    let node = upsert_edge_node(&state, request).await?;
+    Ok(Json(node.into()))
+}
+
+async fn edge_heartbeat(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<EdgeNodeRequest>,
+) -> Result<Json<EdgeNodeResponse>, ApiError> {
+    verify_edge_token(&state, &headers)?;
+    let node = upsert_edge_node(&state, request).await?;
+    Ok(Json(node.into()))
+}
+
+async fn upsert_edge_node(
+    state: &AppState,
+    request: EdgeNodeRequest,
+) -> Result<EdgeNodeRecord, ApiError> {
+    if request.node_id.trim().is_empty()
+        || request.node_name.trim().is_empty()
+        || request.hostname.trim().is_empty()
+    {
+        return Err(ApiError::BadRequest);
+    }
+
+    let inventory_json = serde_json::to_string(&request.inventory).map_err(|error| {
+        tracing::error!(?error, "edge node inventory serialization failed");
+        ApiError::Internal
+    })?;
+    state
+        .db
+        .upsert_edge_node(&EdgeNodeInput {
+            id: request.node_id,
+            name: request.node_name,
+            hostname: request.hostname,
+            architecture: request.architecture,
+            os: request.os,
+            kernel: request.kernel,
+            speiche_version: request.speiche_version,
+            health_status: request.health_status,
+            inventory_json: Some(inventory_json),
+        })
+        .await
+}
+
+fn verify_edge_token(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+    let expected = state.config.dev_edge_token.as_deref().ok_or(ApiError::Forbidden)?;
+    let provided = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .or_else(|| {
+            headers
+                .get("x-nabe-edge-token")
+                .and_then(|value| value.to_str().ok())
+        })
+        .unwrap_or_default();
+
+    if provided == expected {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden)
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SessionResponse {
@@ -290,6 +386,72 @@ struct AdguardDebugAccess {
     url: String,
     username: Option<String>,
     password: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DevEdgeTokenResponse {
+    configured: bool,
+    token: Option<String>,
+    warning: &'static str,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EdgeNodeRequest {
+    node_id: String,
+    node_name: String,
+    hostname: String,
+    architecture: String,
+    os: String,
+    kernel: String,
+    speiche_version: String,
+    health_status: String,
+    inventory: serde_json::Value,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EdgeNodesResponse {
+    nodes: Vec<EdgeNodeResponse>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EdgeNodeResponse {
+    node_id: String,
+    node_name: String,
+    hostname: String,
+    architecture: String,
+    os: String,
+    kernel: String,
+    speiche_version: String,
+    health_status: String,
+    inventory: Option<serde_json::Value>,
+    enrolled_at: String,
+    last_seen_at: String,
+}
+
+impl From<EdgeNodeRecord> for EdgeNodeResponse {
+    fn from(record: EdgeNodeRecord) -> Self {
+        let inventory = record
+            .inventory_json
+            .as_deref()
+            .and_then(|value| serde_json::from_str(value).ok());
+        Self {
+            node_id: record.id,
+            node_name: record.name,
+            hostname: record.hostname,
+            architecture: record.architecture,
+            os: record.os,
+            kernel: record.kernel,
+            speiche_version: record.speiche_version,
+            health_status: record.health_status,
+            inventory,
+            enrolled_at: record.enrolled_at,
+            last_seen_at: record.last_seen_at,
+        }
+    }
 }
 
 async fn load_engine_status(state: &AppState) -> Result<EngineStatus, ApiError> {

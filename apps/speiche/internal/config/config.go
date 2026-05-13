@@ -7,6 +7,8 @@ type Config struct {
 	NabeAPIURL      string
 	EnrollmentToken string
 	AdGuardURL      string
+	StateDir        string
+	IntervalSeconds string
 }
 
 func FromEnv() Config {
@@ -15,6 +17,8 @@ func FromEnv() Config {
 		NabeAPIURL:      getenv("NABE_API_URL", "http://localhost:8080"),
 		EnrollmentToken: os.Getenv("SPEICHE_ENROLLMENT_TOKEN"),
 		AdGuardURL:      getenv("ADGUARD_BASE_URL", "http://127.0.0.1:3000"),
+		StateDir:        getenv("SPEICHE_STATE_DIR", "/var/lib/nabe/speiche"),
+		IntervalSeconds: getenv("SPEICHE_HEARTBEAT_INTERVAL_SECONDS", "30"),
 	}
 }
 
