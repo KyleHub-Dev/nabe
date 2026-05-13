@@ -199,8 +199,6 @@ async fn dashboard(
         stats,
         adguard: AdguardDebugAccess {
             url: state.config.adguard_debug_url.as_str().to_string(),
-            username: state.config.adguard_username.clone(),
-            password: state.config.adguard_password.clone(),
         },
     }))
 }
@@ -384,8 +382,6 @@ struct DashboardStats {
 #[serde(rename_all = "camelCase")]
 struct AdguardDebugAccess {
     url: String,
-    username: Option<String>,
-    password: Option<String>,
 }
 
 #[derive(Serialize)]
