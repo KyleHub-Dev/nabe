@@ -33,3 +33,9 @@ func TestUnboundConfigUsesExplicitPort(t *testing.T) {
 		t.Fatalf("unbound config must bind the local resolver on 127.0.0.1:5335")
 	}
 }
+
+func TestAdGuardHomeConfigBindsUIToLoopback(t *testing.T) {
+	if !strings.Contains(adGuardHomeConfig, "address: 127.0.0.1:3000") {
+		t.Fatalf("AdGuard Home UI must bind to loopback only")
+	}
+}

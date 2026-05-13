@@ -212,8 +212,18 @@ func installAdGuardHome(edgeInstallOptions, hostFacts) error {
 			return err
 		}
 	}
-	config := `bind_host: 127.0.0.1
-bind_port: 3000
+	config := adGuardHomeConfig
+	if err := writeRootFile("/opt/AdGuardHome/AdGuardHome.yaml", config, "0600"); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "enable", "AdGuardHome"); err != nil {
+		return err
+	}
+	return run("sudo", "systemctl", "restart", "AdGuardHome")
+}
+
+const adGuardHomeConfig = `http:
+  address: 127.0.0.1:3000
 users: []
 auth_attempts: 5
 block_auth_min: 15
@@ -238,14 +248,6 @@ user_rules:
   - "||blocked.nabe.test^"
 schema_version: 29
 `
-	if err := writeRootFile("/opt/AdGuardHome/AdGuardHome.yaml", config, "0600"); err != nil {
-		return err
-	}
-	if err := run("sudo", "systemctl", "enable", "AdGuardHome"); err != nil {
-		return err
-	}
-	return run("sudo", "systemctl", "restart", "AdGuardHome")
-}
 
 func installSpeiche(edgeInstallOptions, hostFacts) error {
 	tmp, err := os.MkdirTemp("", "nabe-source-*")
