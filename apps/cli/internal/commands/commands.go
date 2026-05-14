@@ -390,7 +390,10 @@ WantedBy=multi-user.target
 	if err := run("sudo", "systemctl", "daemon-reload"); err != nil {
 		return err
 	}
-	return run("sudo", "systemctl", "enable", "--now", "speiche")
+	if err := run("sudo", "systemctl", "enable", "speiche"); err != nil {
+		return err
+	}
+	return run("sudo", "systemctl", "restart", "speiche")
 }
 
 func runHealthChecks(edgeInstallOptions, hostFacts) error {
