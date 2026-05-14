@@ -14,10 +14,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"codeberg.org/KyleHub/nabe/apps/cli/internal/config"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const version = "0.0.0"
@@ -46,9 +48,11 @@ func usage() error {
 }
 
 type edgeInstallOptions struct {
-	Remote        string
-	Token         string
-	AdGuardUIBind string
+	Remote               string
+	Token                string
+	AdGuardUIBind        string
+	AdGuardAdminUser     string
+	AdGuardAdminPassword string
 }
 
 type hostFacts struct {
@@ -66,13 +70,21 @@ func runInstall(args []string) error {
 	remote := flags.String("remote", "", "Nabe central API URL")
 	token := flags.String("token", "", "dev edge token")
 	adGuardUIBind := flags.String("adguard-ui-bind", "127.0.0.1:3000", "AdGuard Home UI/API bind address")
+	adGuardAdminUser := flags.String("adguard-admin-user", "", "AdGuard Home admin username; required for non-loopback UI binds")
+	adGuardAdminPassword := flags.String("adguard-admin-password", "", "AdGuard Home admin password; required for non-loopback UI binds")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if !*edge {
 		return errors.New("only edge installation is supported: pass --edge")
 	}
-	opts := edgeInstallOptions{Remote: *remote, Token: *token, AdGuardUIBind: *adGuardUIBind}
+	opts := edgeInstallOptions{
+		Remote:               *remote,
+		Token:                *token,
+		AdGuardUIBind:        *adGuardUIBind,
+		AdGuardAdminUser:     *adGuardAdminUser,
+		AdGuardAdminPassword: *adGuardAdminPassword,
+	}
 	if err := validateEdgeOptions(opts); err != nil {
 		return err
 	}
@@ -130,6 +142,14 @@ func validateEdgeOptions(opts edgeInstallOptions) error {
 	if err := validateBindAddress(opts.AdGuardUIBind); err != nil {
 		return fmt.Errorf("--adguard-ui-bind: %w", err)
 	}
+	if !isLoopbackBind(opts.AdGuardUIBind) {
+		if strings.TrimSpace(opts.AdGuardAdminUser) == "" {
+			return errors.New("--adguard-admin-user is required when --adguard-ui-bind is not loopback")
+		}
+		if strings.TrimSpace(opts.AdGuardAdminPassword) == "" {
+			return errors.New("--adguard-admin-password is required when --adguard-ui-bind is not loopback")
+		}
+	}
 	return nil
 }
 
@@ -149,6 +169,18 @@ func validateBindAddress(value string) error {
 		return errors.New("host must be an IP address or localhost")
 	}
 	return nil
+}
+
+func isLoopbackBind(value string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(value))
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func detectHostFacts() (hostFacts, error) {
@@ -238,7 +270,10 @@ func installAdGuardHome(opts edgeInstallOptions, facts hostFacts) error {
 			return err
 		}
 	}
-	config := adGuardHomeConfig(opts.AdGuardUIBind)
+	config, err := adGuardHomeConfig(opts)
+	if err != nil {
+		return err
+	}
 	if err := writeRootFile("/opt/AdGuardHome/AdGuardHome.yaml", config, "0600"); err != nil {
 		return err
 	}
@@ -248,10 +283,21 @@ func installAdGuardHome(opts edgeInstallOptions, facts hostFacts) error {
 	return run("sudo", "systemctl", "restart", "AdGuardHome")
 }
 
-func adGuardHomeConfig(uiBind string) string {
+func adGuardHomeConfig(opts edgeInstallOptions) (string, error) {
+	users := "users: []"
+	if strings.TrimSpace(opts.AdGuardAdminUser) != "" || strings.TrimSpace(opts.AdGuardAdminPassword) != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(opts.AdGuardAdminPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return "", err
+		}
+		users = fmt.Sprintf(`users:
+  - name: %s
+    password: %s`, yamlScalar(opts.AdGuardAdminUser), yamlScalar(string(hash)))
+	}
+
 	return fmt.Sprintf(`http:
   address: %s
-users: []
+%s
 auth_attempts: 5
 block_auth_min: 15
 http_proxy: ""
@@ -274,7 +320,7 @@ filters: []
 user_rules:
   - "||blocked.nabe.test^"
 schema_version: 29
-`, uiBind)
+`, opts.AdGuardUIBind, users), nil
 }
 
 func installSpeiche(edgeInstallOptions, hostFacts) error {
@@ -514,6 +560,10 @@ func localAddresses() []string {
 
 func shellValue(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func yamlScalar(value string) string {
+	return strconv.Quote(value)
 }
 
 func getenv(key string, fallback string) string {
