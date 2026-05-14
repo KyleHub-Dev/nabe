@@ -44,15 +44,21 @@ func Run(args []string, cfg config.Config) error {
 }
 
 func usage() error {
-	return errors.New("usage: nabe <version|status|install --edge --remote <url> --token <token> [--adguard-ui-bind <addr:port>]>")
+	return errors.New("usage: nabe <version|status|install --edge --remote <url> --token <token> [--adguard-ui-bind <addr:port>] [--adguard-dhcp --adguard-dhcp-interface <iface> --adguard-dhcp-gateway <ip> --adguard-dhcp-subnet <mask> --adguard-dhcp-range-start <ip> --adguard-dhcp-range-end <ip>]>")
 }
 
 type edgeInstallOptions struct {
-	Remote               string
-	Token                string
-	AdGuardUIBind        string
-	AdGuardAdminUser     string
-	AdGuardAdminPassword string
+	Remote                string
+	Token                 string
+	AdGuardUIBind         string
+	AdGuardAdminUser      string
+	AdGuardAdminPassword  string
+	AdGuardDHCPEnabled    bool
+	AdGuardDHCPInterface  string
+	AdGuardDHCPGateway    string
+	AdGuardDHCPSubnet     string
+	AdGuardDHCPRangeStart string
+	AdGuardDHCPRangeEnd   string
 }
 
 type hostFacts struct {
@@ -72,6 +78,12 @@ func runInstall(args []string) error {
 	adGuardUIBind := flags.String("adguard-ui-bind", "127.0.0.1:3000", "AdGuard Home UI/API bind address")
 	adGuardAdminUser := flags.String("adguard-admin-user", "", "AdGuard Home admin username; required for non-loopback UI binds")
 	adGuardAdminPassword := flags.String("adguard-admin-password", "", "AdGuard Home admin password; required for non-loopback UI binds")
+	adGuardDHCP := flags.Bool("adguard-dhcp", false, "enable AdGuard Home DHCP server")
+	adGuardDHCPInterface := flags.String("adguard-dhcp-interface", "eth0", "AdGuard Home DHCP interface")
+	adGuardDHCPGateway := flags.String("adguard-dhcp-gateway", "", "AdGuard Home DHCP gateway IP")
+	adGuardDHCPSubnet := flags.String("adguard-dhcp-subnet", "255.255.255.0", "AdGuard Home DHCP subnet mask")
+	adGuardDHCPRangeStart := flags.String("adguard-dhcp-range-start", "", "AdGuard Home DHCP range start")
+	adGuardDHCPRangeEnd := flags.String("adguard-dhcp-range-end", "", "AdGuard Home DHCP range end")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -79,11 +91,17 @@ func runInstall(args []string) error {
 		return errors.New("only edge installation is supported: pass --edge")
 	}
 	opts := edgeInstallOptions{
-		Remote:               *remote,
-		Token:                *token,
-		AdGuardUIBind:        *adGuardUIBind,
-		AdGuardAdminUser:     *adGuardAdminUser,
-		AdGuardAdminPassword: *adGuardAdminPassword,
+		Remote:                *remote,
+		Token:                 *token,
+		AdGuardUIBind:         *adGuardUIBind,
+		AdGuardAdminUser:      *adGuardAdminUser,
+		AdGuardAdminPassword:  *adGuardAdminPassword,
+		AdGuardDHCPEnabled:    *adGuardDHCP,
+		AdGuardDHCPInterface:  *adGuardDHCPInterface,
+		AdGuardDHCPGateway:    *adGuardDHCPGateway,
+		AdGuardDHCPSubnet:     *adGuardDHCPSubnet,
+		AdGuardDHCPRangeStart: *adGuardDHCPRangeStart,
+		AdGuardDHCPRangeEnd:   *adGuardDHCPRangeEnd,
 	}
 	if err := validateEdgeOptions(opts); err != nil {
 		return err
@@ -148,6 +166,21 @@ func validateEdgeOptions(opts edgeInstallOptions) error {
 		}
 		if strings.TrimSpace(opts.AdGuardAdminPassword) == "" {
 			return errors.New("--adguard-admin-password is required when --adguard-ui-bind is not loopback")
+		}
+	}
+	if opts.AdGuardDHCPEnabled {
+		if strings.TrimSpace(opts.AdGuardDHCPInterface) == "" {
+			return errors.New("--adguard-dhcp-interface is required when --adguard-dhcp is enabled")
+		}
+		for name, value := range map[string]string{
+			"--adguard-dhcp-gateway":     opts.AdGuardDHCPGateway,
+			"--adguard-dhcp-subnet":      opts.AdGuardDHCPSubnet,
+			"--adguard-dhcp-range-start": opts.AdGuardDHCPRangeStart,
+			"--adguard-dhcp-range-end":   opts.AdGuardDHCPRangeEnd,
+		} {
+			if net.ParseIP(strings.TrimSpace(value)) == nil {
+				return fmt.Errorf("%s must be a valid IP address when --adguard-dhcp is enabled", name)
+			}
 		}
 	}
 	return nil
@@ -294,6 +327,7 @@ func adGuardHomeConfig(opts edgeInstallOptions) (string, error) {
   - name: %s
     password: %s`, yamlScalar(opts.AdGuardAdminUser), yamlScalar(string(hash)))
 	}
+	dhcp := adGuardDHCPConfig(opts)
 
 	return fmt.Sprintf(`http:
   address: %s
@@ -319,8 +353,33 @@ dns:
 filters: []
 user_rules:
   - "||blocked.nabe.test^"
+%s
 schema_version: 29
-`, opts.AdGuardUIBind, users), nil
+`, opts.AdGuardUIBind, users, dhcp), nil
+}
+
+func adGuardDHCPConfig(opts edgeInstallOptions) string {
+	enabled := "false"
+	if opts.AdGuardDHCPEnabled {
+		enabled = "true"
+	}
+	return fmt.Sprintf(`dhcp:
+  enabled: %s
+  interface_name: %s
+  local_domain_name: lan
+  dhcpv4:
+    gateway_ip: %s
+    subnet_mask: %s
+    range_start: %s
+    range_end: %s
+    lease_duration: 86400
+    icmp_timeout_msec: 1000
+    options: []
+  dhcpv6:
+    range_start: ""
+    lease_duration: 86400
+    ra_slaac_only: false
+    ra_allow_slaac: false`, enabled, yamlScalar(opts.AdGuardDHCPInterface), yamlScalar(opts.AdGuardDHCPGateway), yamlScalar(opts.AdGuardDHCPSubnet), yamlScalar(opts.AdGuardDHCPRangeStart), yamlScalar(opts.AdGuardDHCPRangeEnd))
 }
 
 func installSpeiche(edgeInstallOptions, hostFacts) error {

@@ -85,3 +85,44 @@ func TestValidateEdgeOptionsRequiresAdminForPublicUIBind(t *testing.T) {
 		t.Fatalf("expected public UI bind to require admin credentials")
 	}
 }
+
+func TestValidateEdgeOptionsRequiresDHCPSettingsWhenEnabled(t *testing.T) {
+	err := validateEdgeOptions(edgeInstallOptions{
+		Remote:              "http://10.0.0.230:8080",
+		Token:               "token",
+		AdGuardDHCPEnabled:  true,
+		AdGuardDHCPSubnet:   "255.255.255.0",
+		AdGuardDHCPGateway:  "10.0.0.1",
+		AdGuardDHCPRangeEnd: "10.0.0.250",
+	})
+	if err == nil {
+		t.Fatalf("expected incomplete DHCP settings to be rejected")
+	}
+}
+
+func TestAdGuardHomeConfigCanEnableDHCP(t *testing.T) {
+	config, err := adGuardHomeConfig(edgeInstallOptions{
+		AdGuardUIBind:         "127.0.0.1:3000",
+		AdGuardDHCPEnabled:    true,
+		AdGuardDHCPInterface:  "eth0",
+		AdGuardDHCPGateway:    "10.0.0.1",
+		AdGuardDHCPSubnet:     "255.255.255.0",
+		AdGuardDHCPRangeStart: "10.0.0.100",
+		AdGuardDHCPRangeEnd:   "10.0.0.250",
+	})
+	if err != nil {
+		t.Fatalf("config failed: %v", err)
+	}
+	for _, want := range []string{
+		"dhcp:",
+		"enabled: true",
+		"interface_name: \"eth0\"",
+		"gateway_ip: \"10.0.0.1\"",
+		"range_start: \"10.0.0.100\"",
+		"range_end: \"10.0.0.250\"",
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("config missing %q", want)
+		}
+	}
+}

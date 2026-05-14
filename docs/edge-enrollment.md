@@ -34,4 +34,31 @@ Edge AdGuard UI defaults:
   `--adguard-admin-password`; the installer writes a bcrypt-backed AdGuard
   user. Loopback-only dev installs may omit users.
 
+Edge DHCP defaults:
+
+- `nabe install --edge` keeps AdGuard Home DHCP disabled by default.
+- DHCP is enabled only with `--adguard-dhcp`.
+- When DHCP is enabled, the installer requires:
+  - `--adguard-dhcp-interface`, for example `eth0`
+  - `--adguard-dhcp-gateway`, for example `10.0.0.1`
+  - `--adguard-dhcp-subnet`, for example `255.255.255.0`
+  - `--adguard-dhcp-range-start`, for example `10.0.0.100`
+  - `--adguard-dhcp-range-end`, for example `10.0.0.250`
+
+Router cutover for a home LAN:
+
+1. Keep the router DHCP server enabled.
+2. Run the edge installer with `--adguard-dhcp` and a non-overlapping range.
+3. Open the AdGuard UI and verify DHCP settings are present but do not switch
+   clients yet if the router is still serving the same range.
+4. Disable DHCP on the router.
+5. Restart WiFi on one client or renew its lease.
+6. Confirm the client receives DNS server `10.0.0.10` directly.
+7. Confirm AdGuard query log shows the real client IP instead of only the
+   router IP.
+
+Do not run two DHCP servers on the same LAN range. During migration, use a
+small test range or switch router DHCP off immediately after enabling AdGuard
+DHCP.
+
 Optional Newt/Pangolin routes may later provide private break-glass access to native edge UIs. They are not the main control plane.
