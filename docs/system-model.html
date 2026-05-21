@@ -1,0 +1,1074 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nabe System Model</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f6f1;
+      --surface: #ffffff;
+      --surface-2: #efeee8;
+      --text: #191916;
+      --muted: #666459;
+      --line: #d7d3c5;
+      --accent: #386653;
+      --accent-2: #7a4f2a;
+      --danger: #8a2f2f;
+      --ok: #2f6d4f;
+      --shadow: 0 14px 36px rgba(31, 29, 22, 0.08);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151512;
+        --surface: #1d1d19;
+        --surface-2: #26251f;
+        --text: #f2f0e8;
+        --muted: #aaa493;
+        --line: #3b382f;
+        --accent: #82b59b;
+        --accent-2: #d2a068;
+        --danger: #e08f8f;
+        --ok: #8fcfaf;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    a { color: var(--accent); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .wrap {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: 42px 0 32px;
+      display: grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap: 28px;
+      align-items: end;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    h1, h2, h3 { line-height: 1.12; margin: 0; }
+    h1 { font-size: clamp(2.2rem, 5vw, 4.8rem); max-width: 11ch; }
+    h2 { font-size: clamp(1.45rem, 2.8vw, 2.25rem); margin-bottom: 16px; }
+    h3 { font-size: 1.05rem; margin-bottom: 8px; }
+
+    .lead {
+      max-width: 78ch;
+      color: var(--muted);
+      font-size: 1.05rem;
+      margin: 18px 0 0;
+    }
+
+    .summary-box {
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .summary-box strong { display: block; margin-bottom: 6px; }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(8px);
+    }
+
+    nav .wrap {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 0;
+    }
+
+    nav a {
+      white-space: nowrap;
+      text-decoration: none;
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 7px 10px;
+      background: var(--surface);
+      font-size: 0.9rem;
+    }
+
+    main { padding: 28px 0 64px; }
+    section { scroll-margin-top: 72px; margin-top: 34px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+    }
+
+    .card {
+      grid-column: span 4;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      padding: 18px;
+      min-height: 100%;
+    }
+
+    .wide { grid-column: span 8; }
+    .full { grid-column: 1 / -1; }
+
+    .tag {
+      display: inline-block;
+      border: 1px solid var(--line);
+      padding: 2px 7px;
+      margin: 0 4px 6px 0;
+      font-size: 0.78rem;
+      color: var(--muted);
+      background: var(--surface-2);
+    }
+
+    .lane {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      padding: 12px;
+      min-height: 112px;
+      position: relative;
+    }
+
+    .step::after {
+      content: ">";
+      position: absolute;
+      right: -10px;
+      top: 40%;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .step:last-child::after { content: ""; }
+    .step b { display: block; margin-bottom: 6px; }
+    .step span { color: var(--muted); font-size: 0.92rem; }
+
+    .tabs {
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .tabs input { position: absolute; opacity: 0; pointer-events: none; }
+
+    .tab-labels {
+      display: flex;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-2);
+    }
+
+    .tab-labels label {
+      padding: 11px 14px;
+      cursor: pointer;
+      border-right: 1px solid var(--line);
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .panel { display: none; padding: 18px; }
+    #tab-permissions:checked ~ .tab-labels label[for="tab-permissions"],
+    #tab-telemetry:checked ~ .tab-labels label[for="tab-telemetry"],
+    #tab-security:checked ~ .tab-labels label[for="tab-security"],
+    #tab-flows:checked ~ .tab-labels label[for="tab-flows"] {
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    #tab-permissions:checked ~ .panels #permissions-panel,
+    #tab-telemetry:checked ~ .panels #telemetry-panel,
+    #tab-security:checked ~ .panels #security-panel,
+    #tab-flows:checked ~ .panels #flows-panel { display: block; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 2px;
+      font-size: 0.94rem;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th { background: var(--surface-2); }
+    td small { color: var(--muted); }
+
+    details {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      margin: 10px 0;
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 12px 14px;
+      font-weight: 800;
+      color: var(--text);
+      background: var(--surface-2);
+    }
+
+    details > div { padding: 14px; }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: var(--surface);
+      padding: 14px 16px;
+      margin: 14px 0;
+    }
+
+    .callout.warn { border-left-color: var(--danger); }
+    .callout.ok { border-left-color: var(--ok); }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .mono-block {
+      background: #11110f;
+      color: #f7f6f1;
+      padding: 14px;
+      overflow-x: auto;
+      border: 1px solid #2d2b25;
+      font-size: 0.9rem;
+    }
+
+    .decision {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 0;
+      border: 1px solid var(--line);
+      margin: 10px 0;
+      background: var(--surface);
+    }
+
+    .decision b {
+      background: var(--surface-2);
+      padding: 12px;
+      border-right: 1px solid var(--line);
+    }
+
+    .decision span { padding: 12px; }
+
+    footer {
+      margin-top: 42px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 860px) {
+      .hero, .split { grid-template-columns: 1fr; }
+      .card, .wide { grid-column: 1 / -1; }
+      .lane { grid-template-columns: 1fr; }
+      .step::after { content: "v"; right: 14px; top: auto; bottom: -16px; }
+      .step:last-child::after { content: ""; }
+      .decision { grid-template-columns: 1fr; }
+      .decision b { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap hero">
+      <div>
+        <p class="eyebrow">Nabe architecture note</p>
+        <h1>System model</h1>
+        <p class="lead">
+          This document explains how Nabe should work when it grows beyond the
+          current MVP: identity, group permissions, central and edge DNS engines,
+          query visibility, aggregated stats, audit logs, and secrets. The
+          canonical decision records live in <code>docs/adr/</code>.
+        </p>
+      </div>
+      <aside class="summary-box">
+        <strong>Core answer</strong>
+        Central is the control plane and dashboard, not the universal raw log
+        bucket. Edges keep raw DNS logs locally by default. Interactive log
+        views use a live edge session, not slow polling jobs. Central stores
+        policy, identity, audit events, health, inventory, and rollups.
+      </aside>
+    </div>
+  </header>
+
+  <nav>
+    <div class="wrap">
+      <a href="#principles">Principles</a>
+      <a href="#shape">System Shape</a>
+      <a href="#authority">Authority</a>
+      <a href="#interactive">Interactive Model</a>
+      <a href="#permissions">Permissions</a>
+      <a href="#telemetry">Stats And Logs</a>
+      <a href="#security">Security</a>
+      <a href="#it-ot-review">IT/OT Review</a>
+      <a href="#rollout">Rollout</a>
+      <a href="#sources">Sources</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section id="principles">
+      <h2>Design Principles</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>1. Nabe owns authorization</h3>
+          <p>
+            Zitadel proves identity. Nabe decides product access. External roles
+            can seed memberships, but final permission checks happen in Nabe
+            against Nabe resources.
+          </p>
+          <span class="tag">OIDC</span><span class="tag">RBAC</span><span class="tag">Tenant scope</span>
+        </article>
+        <article class="card">
+          <h3>2. DNS engines are adapters</h3>
+          <p>
+            AdGuard Home resolves DNS and provides engine APIs. Nabe translates
+            product concepts like Device Clients and policies into engine config.
+          </p>
+          <span class="tag">AdGuard</span><span class="tag">Unbound</span><span class="tag">Adapter</span>
+        </article>
+        <article class="card">
+          <h3>3. Logs stay local unless needed</h3>
+          <p>
+            Raw DNS query logs are sensitive browsing metadata. By default they
+            stay on the engine that observed them. Central receives rollups and
+            can request filtered windows over a live edge channel when a
+            permission allows it.
+          </p>
+          <span class="tag">Privacy</span><span class="tag">Short TTL</span><span class="tag">Filtered</span>
+        </article>
+        <article class="card">
+          <h3>4. Every action is auditable</h3>
+          <p>
+            Control-plane actions are different from DNS query logs. Audit
+            events belong centrally because they explain who changed policy,
+            enrolled an edge, viewed logs, or used break-glass access.
+          </p>
+          <span class="tag">Audit</span><span class="tag">Append-only</span>
+        </article>
+        <article class="card">
+          <h3>5. Edges connect outbound</h3>
+          <p>
+            Speiche should maintain outbound connectivity to central. Central
+            keeps an open session for interactive reads and receives background
+            jobs for slower work.
+          </p>
+          <span class="tag">No inbound edge API</span><span class="tag">Jobs</span>
+        </article>
+        <article class="card">
+          <h3>6. Break-glass is not product UX</h3>
+          <p>
+            Native AdGuard UI is useful for recovery, but it cannot enforce
+            Nabe ownership, role checks, audit policy, or log filtering. It must
+            remain private and separately audited.
+          </p>
+          <span class="tag">Private UI</span><span class="tag">Emergency only</span>
+        </article>
+      </div>
+    </section>
+
+    <section id="shape">
+      <h2>System Shape</h2>
+      <div class="callout">
+        The clean mental model is three planes: identity plane, control plane,
+        and DNS/data plane. Central coordinates them, but only the DNS engines
+        answer DNS queries.
+      </div>
+      <div class="lane">
+        <div class="step"><b>User</b><span>Signs in with Zitadel. Uses Nabe Console or CLI.</span></div>
+        <div class="step"><b>Nabe API</b><span>Checks session, role, tenant, ownership, and resource scope.</span></div>
+        <div class="step"><b>Nabe DB</b><span>Stores subjects, tenants, roles, devices, policies, edges, jobs, audits.</span></div>
+        <div class="step"><b>Engine adapter</b><span>Applies desired state to central AdGuard or edge job target.</span></div>
+        <div class="step"><b>DNS engine</b><span>AdGuard Home plus Unbound resolve, block, count, and log locally.</span></div>
+      </div>
+    </section>
+
+    <section id="authority">
+      <h2>Who Owns What</h2>
+      <div class="split">
+        <div class="card full">
+          <h3>Central Nabe owns</h3>
+          <ul>
+            <li>Subjects, tenants, memberships, roles, and permissions.</li>
+            <li>Device Clients, ClientID tokens, and ownership metadata.</li>
+            <li>Desired DNS policy and policy assignment.</li>
+            <li>Edge inventory, online status, and job results.</li>
+            <li>Audit events for control actions and log access.</li>
+            <li>Aggregated stats that are safe to store centrally.</li>
+          </ul>
+        </div>
+        <div class="card full">
+          <h3>Each DNS engine owns locally</h3>
+          <ul>
+            <li>Actual DNS request handling.</li>
+            <li>Raw query log source data.</li>
+            <li>Engine-local counters and cache state.</li>
+            <li>Resolver config, bind addresses, and local health.</li>
+            <li>Break-glass UI/API, hidden behind private access.</li>
+            <li>Emergency operation if central is temporarily unavailable.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="interactive">
+      <h2>Interactive Model</h2>
+      <div class="tabs">
+        <input checked id="tab-permissions" name="model-tab" type="radio">
+        <input id="tab-telemetry" name="model-tab" type="radio">
+        <input id="tab-security" name="model-tab" type="radio">
+        <input id="tab-flows" name="model-tab" type="radio">
+        <div class="tab-labels">
+          <label for="tab-permissions">Permission check</label>
+          <label for="tab-telemetry">Telemetry check</label>
+          <label for="tab-security">Security boundary</label>
+          <label for="tab-flows">Common flows</label>
+        </div>
+        <div class="panels">
+          <div class="panel" id="permissions-panel">
+            <div class="mono-block"><pre>allow(subject, action, resource):
+  identity = verified_oidc_session(subject)
+  memberships = nabe_memberships(subject)
+  roles = global_roles + tenant_roles + ownership_role(resource)
+  permissions = expand_roles(roles)
+
+  require action in permissions
+  require resource.scope in subject.allowed_scopes
+  require resource.tenant_id matches active tenant, unless platform permission
+  require special constraints, for example break_glass_reason or log_time_window
+  write audit event for sensitive reads and all writes</pre></div>
+          </div>
+          <div class="panel" id="telemetry-panel">
+            <div class="mono-block"><pre>edge telemetry default:
+  heartbeat: node health, versions, service state, no DNS domains
+  rollup: counts by edge, tenant, device_client, policy, time bucket
+  audit: central action trail
+  raw_query_log: stays on engine unless requested through scoped view</pre></div>
+          </div>
+          <div class="panel" id="security-panel">
+            <div class="mono-block"><pre>browser:
+  gets Nabe session and filtered product data
+  never gets AdGuard credentials
+
+central:
+  stores encrypted engine credentials and token hashes
+  calls AdGuard APIs or schedules edge jobs
+
+edge:
+  keeps local engine credentials and raw logs
+  connects outbound through Speiche
+  native UI is loopback/private by default</pre></div>
+          </div>
+          <div class="panel" id="flows-panel">
+            <div class="mono-block"><pre>create device:
+  user -> Nabe API -> permission check -> DB device_client
+  -> engine adapter/job -> AdGuard persistent client/allowed client
+  -> audit event
+
+view tenant logs:
+  user -> Nabe API -> permission check -> scoped query request
+  -> engine filters by client ids/time window -> Nabe rechecks
+  -> short-lived response/cache -> audit event</pre></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="permissions">
+      <h2>Permission System</h2>
+      <p>
+        Use RBAC for manageability, but do not stop at roles. Every decision
+        should include role permissions, resource scope, tenant membership,
+        ownership, and constraints. This avoids the common problem where a group
+        admin accidentally becomes a platform admin or can read unrelated logs.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Scope</th>
+            <th>Can do</th>
+            <th>Cannot do</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>platform_admin</code></td>
+            <td>Whole installation</td>
+            <td>Manage engines, edges, tenants, global settings, secrets, break-glass.</td>
+            <td>Bypass audit. Read raw tenant logs without a logged reason.</td>
+          </tr>
+          <tr>
+            <td><code>platform_operator</code></td>
+            <td>Whole installation</td>
+            <td>Read health, restart jobs, inspect failures, apply system updates.</td>
+            <td>Read tenant query logs or manage tenant members by default.</td>
+          </tr>
+          <tr>
+            <td><code>tenant_owner</code></td>
+            <td>One tenant or family group</td>
+            <td>Manage tenant members, tenant policies, tenant devices, tenant edge assignment.</td>
+            <td>Manage central secrets or other tenants.</td>
+          </tr>
+          <tr>
+            <td><code>tenant_admin</code></td>
+            <td>One tenant</td>
+            <td>Manage devices and policies, view tenant stats, request tenant log views.</td>
+            <td>Delete tenant, change billing/system ownership, break-glass native UI.</td>
+          </tr>
+          <tr>
+            <td><code>tenant_viewer</code></td>
+            <td>One tenant</td>
+            <td>Read device and policy configuration, view aggregated tenant stats.</td>
+            <td>Change policy or view raw query logs.</td>
+          </tr>
+          <tr>
+            <td><code>user</code></td>
+            <td>Self plus assigned tenant</td>
+            <td>Manage own Device Clients, see own device status, maybe own logs.</td>
+            <td>See other users' raw logs or tenant-wide settings.</td>
+          </tr>
+          <tr>
+            <td><code>restricted_user</code></td>
+            <td>Self</td>
+            <td>Use DNS service and see basic device status.</td>
+            <td>View query logs, change policy, create new tokens.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <details open>
+        <summary>Permission namespaces</summary>
+        <div>
+          <table>
+            <thead>
+              <tr><th>Namespace</th><th>Examples</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>platform.*</code></td><td><code>platform.admin</code>, <code>platform.audit.read</code></td><td>Installation-level operations.</td></tr>
+              <tr><td><code>tenant.*</code></td><td><code>tenant.read</code>, <code>tenant.manage</code></td><td>Family/group organization.</td></tr>
+              <tr><td><code>edge.*</code></td><td><code>edge.read</code>, <code>edge.manage</code>, <code>edge.break_glass</code></td><td>Edge nodes and engine access.</td></tr>
+              <tr><td><code>device.*</code></td><td><code>device.read_own</code>, <code>device.manage_tenant</code></td><td>Device Clients and ClientID tokens.</td></tr>
+              <tr><td><code>policy.*</code></td><td><code>policy.read</code>, <code>policy.manage</code>, <code>policy.apply</code></td><td>Desired DNS behavior.</td></tr>
+              <tr><td><code>querylog.*</code></td><td><code>querylog.read_own</code>, <code>querylog.read_tenant</code></td><td>Sensitive. Live, time-limited, filtered, and audited.</td></tr>
+              <tr><td><code>stats.*</code></td><td><code>stats.read_own</code>, <code>stats.read_tenant</code></td><td>Aggregated, safer than logs.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <div class="callout ok">
+        Practical rule: roles grant capabilities, but resource ownership decides
+        which rows and which DNS records are visible. A tenant admin may have
+        <code>querylog.read_tenant</code>, but only for that tenant's client ids
+        and only for an allowed time window.
+      </div>
+    </section>
+
+    <section id="telemetry">
+      <h2>Stats And Logs Aggregation</h2>
+      <p>
+        The safe architecture is not "ship every DNS query to central". Nabe
+        should use tiers of telemetry with different privacy and retention rules.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Data class</th>
+            <th>Default home</th>
+            <th>Central stores?</th>
+            <th>Retention</th>
+            <th>Access</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Heartbeat and inventory</td>
+            <td>Speiche sends to central</td>
+            <td>Yes</td>
+            <td>Long enough for uptime history</td>
+            <td><code>edge.read</code></td>
+          </tr>
+          <tr>
+            <td>Aggregated DNS stats</td>
+            <td>Engine computes, Speiche reports rollups</td>
+            <td>Yes, as time buckets</td>
+            <td>Configurable, e.g. 30 to 180 days</td>
+            <td><code>stats.read_own</code> or <code>stats.read_tenant</code></td>
+          </tr>
+          <tr>
+            <td>Raw DNS query logs</td>
+            <td>Engine-local AdGuard log</td>
+            <td>No by default</td>
+            <td>Short local TTL</td>
+            <td><code>querylog.read_*</code>, audited, time-windowed</td>
+          </tr>
+          <tr>
+            <td>Control-plane audit log</td>
+            <td>Central</td>
+            <td>Yes</td>
+            <td>Longer, append-only</td>
+            <td><code>platform.audit.read</code> or tenant audit permission</td>
+          </tr>
+          <tr>
+            <td>Service logs</td>
+            <td>Local service journal or collector</td>
+            <td>Optional redacted wide events</td>
+            <td>Operational TTL</td>
+            <td>Operator only</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <details open>
+        <summary>Recommended DNS stats rollup schema</summary>
+        <div>
+          <p>
+            Rollups should answer operational questions without exposing every
+            visited domain.
+          </p>
+          <div class="mono-block"><pre>{
+  "bucket_start": "2026-05-21T14:00:00Z",
+  "bucket_seconds": 300,
+  "edge_id": "edge-raspberrypi",
+  "engine_id": "edge-raspberrypi-adguard",
+  "tenant_id": "tenant_gray",
+  "device_client_id": "dc_laptop",
+  "policy_id": "policy_family_default",
+  "queries_total": 124,
+  "blocked_total": 31,
+  "allowed_total": 93,
+  "response_ms_p50": 12,
+  "response_ms_p95": 48,
+  "top_blocked_rule_ids": ["rule_ads", "rule_tracking"]
+}</pre></div>
+          <p>
+            Avoid storing raw domains centrally by default. If top domains are
+            needed later, make that a tenant setting with clear retention and
+            access rules.
+          </p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Raw query log access flow</summary>
+        <div>
+          <ol>
+            <li>User requests logs for a device, tenant, edge, and time window.</li>
+            <li>Nabe checks <code>querylog.read_own</code> or <code>querylog.read_tenant</code>.</li>
+            <li>Nabe writes an audit event before the query is served.</li>
+            <li>Central AdGuard adapter queries central AdGuard directly, or Nabe sends a live query over the active Speiche session for an edge.</li>
+            <li>Engine-side filtering should restrict by ClientID/IP and time window when possible.</li>
+            <li>Nabe re-filters results by owned Device Client IDs before returning.</li>
+            <li>Response is streamed or cached briefly, not stored as a permanent central log.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Interactive logs must not use polling jobs</summary>
+        <div>
+          <p>
+            Clicking "show DNS queries" should feel like opening the native
+            AdGuard query panel. A background job loop that waits for Speiche to
+            poll every X seconds is acceptable for upgrades, policy application,
+            rollup collection, and maintenance, but it is not acceptable for
+            interactive log browsing.
+          </p>
+          <table>
+            <thead>
+              <tr><th>Use case</th><th>Transport</th><th>Expected UX</th><th>Central storage</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Open recent query log</td>
+                <td>Browser -> Nabe API stream -> active Speiche session -> local AdGuard API</td>
+                <td>First page starts quickly, then paginates or streams</td>
+                <td>No permanent raw storage</td>
+              </tr>
+              <tr>
+                <td>Tail live queries</td>
+                <td>Browser WebSocket/SSE to Nabe API, multiplexed over Speiche session</td>
+                <td>Near-real-time rows while the edge is online</td>
+                <td>Optional short memory cache only</td>
+              </tr>
+              <tr>
+                <td>Apply policy or client config</td>
+                <td>Durable edge job with result reporting</td>
+                <td>Progress state, retry-safe</td>
+                <td>Job and result stored</td>
+              </tr>
+              <tr>
+                <td>Collect hourly stats</td>
+                <td>Scheduled background job or Speiche push</td>
+                <td>Not interactive</td>
+                <td>Aggregated buckets stored</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            This keeps the one-dashboard experience while avoiding a central
+            database full of raw browsing history. The dashboard is unified; the
+            data source is federated.
+          </p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Application logging pattern</summary>
+        <div>
+          <p>
+            Nabe services should emit one structured wide event per request or
+            job completion. Include request id, subject id, tenant id, resource
+            ids, permission decision, outcome, duration, version, and edge id.
+            Do not log tokens, passwords, AdGuard credentials, full DNS query
+            payloads, session cookies, or private keys.
+          </p>
+        </div>
+      </details>
+    </section>
+
+    <section id="security">
+      <h2>Security Model</h2>
+      <div class="grid">
+        <article class="card wide">
+          <h3>Identity and sessions</h3>
+          <p>
+            Users authenticate with Zitadel through OIDC. Nabe validates the
+            session and maps the external subject to an internal subject. Zitadel
+            role claims can bootstrap global role and tenant group assignment,
+            but Nabe stores the effective product authorization state.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Device tokens</h3>
+          <p>
+            ClientID values are secret-like identifiers for encrypted DNS
+            clients. Show them once, hash for lookup where possible, encrypt if
+            they must be replayed into an engine, and support rotation.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Engine credentials</h3>
+          <p>
+            AdGuard API credentials stay server-side. The browser receives only
+            Nabe data. Edge credentials stay on the edge and are used by Speiche
+            or local adapters.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Edge trust</h3>
+          <p>
+            Enrollment token should be exchanged for a durable node identity.
+            After enrollment, prefer mTLS or signed node tokens, short-lived job
+            leases, replay protection, and per-node revocation.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Network boundary</h3>
+          <p>
+            Edge nodes connect outbound. Native AdGuard UI binds loopback by
+            default. If exposed for recovery, access must be explicit, private,
+            time-limited, and audited.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Central compromise limit</h3>
+          <p>
+            Central should not contain every household's raw DNS history. A
+            central breach should expose policy, metadata, and rollups, not the
+            full browsing log of every edge.
+          </p>
+        </article>
+      </div>
+
+      <div class="callout warn">
+        Do not multi-tenant a physical edge for real users until client identity
+        is reliable. If a home router forwards all DNS as one IP, per-user log
+        permissions cannot be enforced accurately. Use DHCP, ClientID encrypted
+        DNS, or another reliable client identity source first.
+      </div>
+    </section>
+
+    <section id="flows">
+      <h2>End-State Flows</h2>
+      <div class="grid">
+        <article class="card full">
+          <h3>Create a group and assign admins</h3>
+          <p>
+            Platform admin creates a tenant. Zitadel group or role claim maps
+            users into that tenant. Nabe assigns <code>tenant_owner</code>,
+            <code>tenant_admin</code>, <code>tenant_viewer</code>, or
+            <code>user</code>. All future reads and writes are tenant-scoped.
+          </p>
+        </article>
+        <article class="card full">
+          <h3>Enroll an edge AdGuard</h3>
+          <p>
+            Admin creates an edge enrollment. Pi runs Nabe CLI. Speiche enrolls,
+            stores identity locally, reports heartbeat and inventory, receives
+            jobs, and applies Nabe desired state to local AdGuard.
+          </p>
+        </article>
+        <article class="card full">
+          <h3>Manage a Device Client</h3>
+          <p>
+            User or tenant admin creates a device. Nabe creates a Device Client
+            and ClientID token, assigns policy, writes audit, and applies a
+            persistent/allowed client to the chosen DNS engine.
+          </p>
+        </article>
+        <article class="card full">
+          <h3>View stats without centralizing logs</h3>
+          <p>
+            Edge sends aggregate counters. User sees own or tenant rollups based
+            on <code>stats.read_*</code>. Raw domains stay local unless a
+            permitted, audited query-log view is requested.
+          </p>
+        </article>
+        <article class="card full">
+          <h3>Open edge query logs instantly</h3>
+          <p>
+            Browser opens a Nabe API stream. Nabe authorizes the request,
+            creates a short-lived query capability containing edge id, client
+            ids, time window, and row limit, then sends it over the active
+            Speiche session. Speiche queries local AdGuard, filters results, and
+            streams rows back through Nabe. No polling delay is required.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="it-ot-review">
+      <h2>IT/OT Security Review</h2>
+      <div class="callout warn">
+        Treat Speiche as a conduit between zones, not as a convenience agent.
+        Even in a home or homelab, DNS can become operational infrastructure.
+        In an OT-style network, central must never gain unrestricted remote
+        administration over the edge zone just because the edge is connected.
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Security question</th>
+            <th>Risk</th>
+            <th>Required control</th>
+            <th>Design decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Can central run arbitrary commands on an edge?</td>
+            <td>Central compromise becomes edge compromise.</td>
+            <td>Command allowlist, typed jobs, no remote shell by default, per-command authorization.</td>
+            <td>Speiche accepts only protocol-defined operations such as health, read scoped logs, apply policy, rotate token, restart known service.</td>
+          </tr>
+          <tr>
+            <td>Can an edge impersonate another edge?</td>
+            <td>Cross-tenant data exposure or forged telemetry.</td>
+            <td>Enrollment exchange, durable node identity, mTLS or signed node token, revocation.</td>
+            <td>Enrollment token is single-use or short-lived. Runtime identity is separate and revocable.</td>
+          </tr>
+          <tr>
+            <td>Can a tenant admin read another tenant's DNS history?</td>
+            <td>High privacy breach.</td>
+            <td>Tenant scope, Device Client ownership, server-side filtering, audit on every raw log view.</td>
+            <td>Logs are filtered by allowed client ids and time window before display. Weak attribution disables per-user log views.</td>
+          </tr>
+          <tr>
+            <td>What if an edge is offline?</td>
+            <td>Operator expects logs, but raw data is unavailable.</td>
+            <td>Clear degraded state, last-seen time, local retention, optional encrypted recent cache.</td>
+            <td>Default: no offline raw logs. Optional: short central cache with explicit tenant consent and retention.</td>
+          </tr>
+          <tr>
+            <td>Can policy changes break operational DNS?</td>
+            <td>Loss of name resolution can disrupt IT and OT workflows.</td>
+            <td>Staged config, validation, rollback, maintenance windows, emergency local fallback.</td>
+            <td>Policy apply is a durable job with preflight, versioned desired state, result, and rollback target.</td>
+          </tr>
+          <tr>
+            <td>Can native AdGuard UI bypass Nabe controls?</td>
+            <td>Untracked policy/log access and privilege drift.</td>
+            <td>Private bind, break-glass reason, separate credentials, audit, periodic drift detection.</td>
+            <td>Native UI remains loopback/private and is not normal product UX.</td>
+          </tr>
+          <tr>
+            <td>Is the installer a supply-chain risk?</td>
+            <td><code>curl | bash</code> can install attacker-controlled code if transport or source is compromised.</td>
+            <td>Signed releases, checksums, pinned source, least-privilege installer, reproducible build path.</td>
+            <td>Developer bootstrap may use source install; production edge install needs signed artifacts.</td>
+          </tr>
+          <tr>
+            <td>Can telemetry leak secrets?</td>
+            <td>Logs and traces may expose tokens, DNS queries, cookies, or credentials.</td>
+            <td>Structured allowlisted fields, redaction tests, no secrets in logs, separate raw query path.</td>
+            <td>Wide events are allowed for control-plane operations, not raw DNS payload dumping.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <details open>
+        <summary>Zone and conduit view</summary>
+        <div>
+          <table>
+            <thead>
+              <tr><th>Zone</th><th>Assets</th><th>Trust level</th><th>Conduits</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Identity zone</td>
+                <td>Zitadel, OIDC keys, user MFA</td>
+                <td>Identity authority, not product authorization authority</td>
+                <td>OIDC redirects and token validation to Nabe API</td>
+              </tr>
+              <tr>
+                <td>Central control zone</td>
+                <td>Nabe API, DB, web, central engine adapter</td>
+                <td>Policy decision and audit authority</td>
+                <td>Browser HTTPS, OIDC, Speiche sessions, engine API</td>
+              </tr>
+              <tr>
+                <td>Edge management zone</td>
+                <td>Speiche, local config, node identity</td>
+                <td>Constrained executor</td>
+                <td>Outbound mutually authenticated session to Nabe</td>
+              </tr>
+              <tr>
+                <td>DNS data zone</td>
+                <td>AdGuard Home, Unbound, raw query logs</td>
+                <td>Data processor for a local network or group</td>
+                <td>Localhost API from Speiche, DNS from clients</td>
+              </tr>
+              <tr>
+                <td>Client network zone</td>
+                <td>Phones, laptops, routers, OT devices if present</td>
+                <td>Untrusted clients</td>
+                <td>DNS only, preferably identified by ClientID or DHCP identity</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details>
+        <summary>Controls that should be mandatory before real multi-tenant use</summary>
+        <div>
+          <ul>
+            <li>Deny-by-default authorization middleware on every API route.</li>
+            <li>Stable tenant and Device Client ownership model with tests for cross-tenant denial.</li>
+            <li>Signed edge identity, revocation, and enrollment-token rotation.</li>
+            <li>Typed Speiche command protocol with no arbitrary shell execution.</li>
+            <li>Per-command audit events, including raw query-log views and break-glass access.</li>
+            <li>Config versioning, preflight validation, apply result, and rollback for DNS changes.</li>
+            <li>Explicit raw-log retention policy for each tenant and edge.</li>
+            <li>Secret storage strategy for engine credentials and token material.</li>
+            <li>Drift detection between Nabe desired state and AdGuard actual state.</li>
+            <li>Backups and restore tests for central DB and edge identity/config.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details>
+        <summary>OT-specific constraints if this ever touches real operational networks</summary>
+        <div>
+          <ul>
+            <li>No active discovery or scanning by default. Inventory should be declared or passively observed.</li>
+            <li>No automatic policy changes during operational windows unless explicitly approved.</li>
+            <li>No dependency on public cloud for local DNS continuity once policy is applied.</li>
+            <li>Local fallback must keep DNS service running if central is down.</li>
+            <li>Changes must be attributable, reviewable, and reversible.</li>
+            <li>Separate safety/operations approval for DHCP, resolver, or network-wide DNS cutovers.</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+
+    <section id="rollout">
+      <h2>Recommended Documentation And Implementation Rollout</h2>
+      <div class="decision">
+        <b>Phase 1</b>
+        <span>Document this model in Markdown too, then align database table names with it: tenants, memberships, roles, permissions, edges, device_clients, policies, audit_events, telemetry_rollups.</span>
+      </div>
+      <div class="decision">
+        <b>Phase 2</b>
+        <span>Implement permission middleware in Nabe API. Every handler declares action and resource loader. Tests cover deny by default, tenant isolation, and owner-only visibility.</span>
+      </div>
+      <div class="decision">
+        <b>Phase 3</b>
+        <span>Implement edge job protocol for desired state: apply clients, apply policy, collect rollup, fetch scoped query log window.</span>
+      </div>
+      <div class="decision">
+        <b>Phase 4</b>
+        <span>Implement telemetry retention settings per tenant and edge. Make raw log central caching opt-in, short-lived, and audited.</span>
+      </div>
+    </section>
+
+    <section id="sources">
+      <h2>Sources Reviewed</h2>
+      <ul>
+        <li><a href="https://csrc.nist.gov/Projects/role-based-access-control/faqs">NIST RBAC FAQ</a> for role, permission, and session concepts.</li>
+        <li><a href="https://zitadel.com/docs/guides/integrate/retrieve-user-roles">Zitadel role retrieval docs</a> for OIDC role claims and audience requirements.</li>
+        <li><a href="https://github.com/AdguardTeam/AdGuardHome/wiki/Clients">AdGuard Home clients documentation</a> for persistent clients and ClientID behavior.</li>
+        <li><a href="https://github.com/AdguardTeam/AdGuardHome/blob/master/openapi/openapi.yaml">AdGuard Home OpenAPI</a> for query log, stats, and client API surfaces.</li>
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html">OWASP Logging Cheat Sheet</a> for sensitive data exclusion and logging controls.</li>
+        <li><a href="https://opentelemetry.io/docs/concepts/signals/">OpenTelemetry signals documentation</a> for separating metrics, logs, traces, and events.</li>
+      </ul>
+    </section>
+
+    <footer>
+      <p>
+        This is an architecture target, not a statement that every part already
+        exists in the current MVP. It should guide the next implementation and
+        split product permissions from DNS engine mechanics.
+      </p>
+    </footer>
+  </main>
+</body>
+</html>

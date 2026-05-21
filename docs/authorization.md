@@ -1,5 +1,11 @@
 # Authorization Model
 
+Status: Background.
+
+Canonical authorization decisions now live in
+`docs/adr/0003-authorization-permission-model.md`. If this document conflicts
+with that ADR, the ADR supersedes it.
+
 Nabe uses Zitadel for authentication and Nabe-owned authorization data for product permissions.
 
 For MVP 0 the backend still treats a successful Zitadel login as an admin session so the first local stack remains easy to operate. The database schema is prepared for the next step: multi-tenant authorization with global permissions, tenant roles, and subject memberships.

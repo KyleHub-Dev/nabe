@@ -1,5 +1,15 @@
 # Security
 
+Status: Background.
+
+Canonical security decisions now live in `docs/adr/`, especially:
+
+- `docs/adr/0003-authorization-permission-model.md`
+- `docs/adr/0005-telemetry-retention-and-log-access.md`
+- `docs/adr/0006-it-ot-security-baseline.md`
+
+If this document conflicts with an accepted ADR, the ADR supersedes it.
+
 - Do not run an open resolver.
 - Do not expose public plain DNS/53 for Cloud DNS unless it is intentionally restricted.
 - Prefer encrypted DNS with ClientID tokens for Cloud DNS: DoT, DoH, and DoQ.

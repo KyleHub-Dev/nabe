@@ -1,5 +1,15 @@
 # Architecture
 
+Status: Background.
+
+Canonical decisions now live in `docs/adr/`, especially:
+
+- `docs/adr/0001-architecture-decision-method.md`
+- `docs/adr/0002-control-plane-zone-model.md`
+- `docs/adr/0004-edge-connectivity-live-logs.md`
+
+If this document conflicts with an accepted ADR, the ADR supersedes it.
+
 Nabe is the product and control plane. DNS Engines do the resolver work.
 
 ## Components
