@@ -66,3 +66,18 @@ small test range or switch router DHCP off immediately after enabling AdGuard
 DHCP.
 
 Optional Newt/Pangolin routes may later provide private break-glass access to native edge UIs. They are not the main control plane.
+
+Deferred central enrollment:
+
+- `nabe install --edge --defer-enrollment` installs the local edge stack
+  without writing `/etc/nabe/speiche.env` or starting Speiche.
+- Use this when the Pi should be prepared before the central API URL or
+  enrollment token is final.
+- Later, run:
+
+```sh
+nabe configure edge --remote "http://10.0.0.230:8080" --token "<edge-token>"
+```
+
+That writes `/etc/nabe/speiche.env`, enables Speiche, and restarts it so the
+edge can enroll.

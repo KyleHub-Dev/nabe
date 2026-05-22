@@ -28,6 +28,25 @@ func TestValidateEdgeOptionsAcceptsLanRemote(t *testing.T) {
 	}
 }
 
+func TestValidateEdgeOptionsAllowsDeferredEnrollment(t *testing.T) {
+	err := validateEdgeOptions(edgeInstallOptions{
+		DeferEnrollment: true,
+	})
+	if err != nil {
+		t.Fatalf("expected deferred enrollment to be accepted: %v", err)
+	}
+}
+
+func TestValidateEdgeOptionsRejectsDeferredEnrollmentWithRemote(t *testing.T) {
+	err := validateEdgeOptions(edgeInstallOptions{
+		Remote:          "http://10.0.0.230:8080",
+		DeferEnrollment: true,
+	})
+	if err == nil {
+		t.Fatalf("expected deferred enrollment with remote to be rejected")
+	}
+}
+
 func TestUnboundConfigUsesExplicitPort(t *testing.T) {
 	if !strings.Contains(unboundConfig, "interface: 127.0.0.1\n  port: 5335") {
 		t.Fatalf("unbound config must bind the local resolver on 127.0.0.1:5335")

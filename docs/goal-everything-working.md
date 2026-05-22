@@ -184,6 +184,10 @@ Required edge behavior:
 - `nabe install --edge --remote <central-url> --token <token>
   --adguard-ui-alias adguard.home` bootstraps the Pi or reports an actionable
   failure.
+- `nabe install --edge --defer-enrollment --adguard-ui-alias adguard.home`
+  prepares the Pi when the central URL or token is not available yet.
+- `nabe configure edge --remote <central-url> --token <token>` writes Speiche
+  enrollment config later and starts the edge agent.
 - Edge install rejects `localhost`, `127.0.0.1`, and `::1` central URLs.
 - Edge install detects OS, architecture, init system, network address, and
   package tool.
@@ -373,6 +377,9 @@ ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'curl -fsSL http://<current-workst
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'curl -fsSL https://codeberg.org/KyleHub/nabe/raw/branch/main/install.sh | bash'
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe version'
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe install --edge --remote "http://<current-workstation-lan-ip>:8080" --token "<dev-token>" --adguard-ui-alias adguard.home'
+# Or prepare first, then enroll later:
+ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe install --edge --defer-enrollment --adguard-ui-alias adguard.home'
+ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe configure edge --remote "http://<current-workstation-lan-ip>:8080" --token "<dev-token>"'
 ```
 
 Pi service checks:

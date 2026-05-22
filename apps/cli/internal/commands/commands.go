@@ -40,18 +40,21 @@ func Run(args []string, cfg config.Config) error {
 		return nil
 	case "install":
 		return runInstall(args[1:])
+	case "configure":
+		return runConfigure(args[1:])
 	default:
 		return usage()
 	}
 }
 
 func usage() error {
-	return errors.New("usage: nabe <version|status|install --edge --remote <url> --token <token> [--adguard-ui-bind <addr:port>] [--adguard-ui-alias adguard.home] [--adguard-dhcp --adguard-dhcp-interface <iface> --adguard-dhcp-gateway <ip> --adguard-dhcp-subnet <mask> --adguard-dhcp-range-start <ip> --adguard-dhcp-range-end <ip>]>")
+	return errors.New("usage: nabe <version|status|install --edge (--remote <url> --token <token> | --defer-enrollment) [--adguard-ui-bind <addr:port>] [--adguard-ui-alias adguard.home] [--adguard-dhcp ...]|configure edge --remote <url> --token <token>>")
 }
 
 type edgeInstallOptions struct {
 	Remote                string
 	Token                 string
+	DeferEnrollment       bool
 	AdGuardUIBind         string
 	AdGuardUIAlias        string
 	AdGuardUIAliasIP      string
@@ -79,6 +82,7 @@ func runInstall(args []string) error {
 	edge := flags.Bool("edge", false, "install as an edge DNS node")
 	remote := flags.String("remote", "", "Nabe central API URL")
 	token := flags.String("token", "", "dev edge token")
+	deferEnrollment := flags.Bool("defer-enrollment", false, "install local edge services without configuring central enrollment")
 	adGuardUIBind := flags.String("adguard-ui-bind", "127.0.0.1:3000", "AdGuard Home UI/API bind address")
 	adGuardUIAlias := flags.String("adguard-ui-alias", "", "optional local DNS name for break-glass AdGuard Home UI, for example adguard.home")
 	adGuardUIAliasIP := flags.String("adguard-ui-alias-ip", "", "optional IP for --adguard-ui-alias; defaults to the first non-loopback IPv4 address")
@@ -99,6 +103,7 @@ func runInstall(args []string) error {
 	opts := edgeInstallOptions{
 		Remote:                *remote,
 		Token:                 *token,
+		DeferEnrollment:       *deferEnrollment,
 		AdGuardUIBind:         *adGuardUIBind,
 		AdGuardUIAlias:        *adGuardUIAlias,
 		AdGuardUIAliasIP:      *adGuardUIAliasIP,
@@ -155,6 +160,39 @@ func runInstall(args []string) error {
 	return nil
 }
 
+func runConfigure(args []string) error {
+	if len(args) == 0 || args[0] != "edge" {
+		return errors.New("usage: nabe configure edge --remote <url> --token <token>")
+	}
+	flags := flag.NewFlagSet("configure edge", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	remote := flags.String("remote", "", "Nabe central API URL")
+	token := flags.String("token", "", "edge enrollment token")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := validateEdgeRemote(*remote, *token); err != nil {
+		return err
+	}
+	if err := writeSpeicheEnv(*remote, *token); err != nil {
+		return err
+	}
+	if err := writeSpeicheUnit(); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "enable", "speiche"); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "restart", "speiche"); err != nil {
+		return err
+	}
+	fmt.Println("Speiche configured and restarted")
+	return nil
+}
+
 func validateEdgeOptions(opts edgeInstallOptions) error {
 	if strings.TrimSpace(opts.AdGuardUIBind) == "" {
 		opts.AdGuardUIBind = "127.0.0.1:3000"
@@ -177,19 +215,12 @@ func validateEdgeOptionSyntax(opts edgeInstallOptions) error {
 	if strings.TrimSpace(opts.AdGuardUIBind) == "" {
 		opts.AdGuardUIBind = "127.0.0.1:3000"
 	}
-	if strings.TrimSpace(opts.Remote) == "" {
-		return errors.New("--remote is required")
-	}
-	if strings.TrimSpace(opts.Token) == "" {
-		return errors.New("--token is required")
-	}
-	parsed, err := url.Parse(opts.Remote)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return errors.New("--remote must be an absolute URL")
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-		return errors.New("--remote must not point at localhost in edge mode")
+	if opts.DeferEnrollment {
+		if strings.TrimSpace(opts.Remote) != "" || strings.TrimSpace(opts.Token) != "" {
+			return errors.New("--defer-enrollment cannot be combined with --remote or --token")
+		}
+	} else if err := validateEdgeRemote(opts.Remote, opts.Token); err != nil {
+		return err
 	}
 	if err := validateBindAddress(opts.AdGuardUIBind); err != nil {
 		return fmt.Errorf("--adguard-ui-bind: %w", err)
@@ -216,6 +247,24 @@ func validateEdgeOptionSyntax(opts edgeInstallOptions) error {
 				return fmt.Errorf("%s must be a valid IP address when --adguard-dhcp is enabled", name)
 			}
 		}
+	}
+	return nil
+}
+
+func validateEdgeRemote(remote string, token string) error {
+	if strings.TrimSpace(remote) == "" {
+		return errors.New("--remote is required")
+	}
+	if strings.TrimSpace(token) == "" {
+		return errors.New("--token is required")
+	}
+	parsed, err := url.Parse(remote)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return errors.New("--remote must be an absolute URL")
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return errors.New("--remote must not point at localhost in edge mode")
 	}
 	return nil
 }
@@ -571,6 +620,32 @@ func installSpeiche(edgeInstallOptions, hostFacts) error {
 }
 
 func configureSpeiche(opts edgeInstallOptions, facts hostFacts) error {
+	if opts.DeferEnrollment {
+		if err := writeSpeicheUnit(); err != nil {
+			return err
+		}
+		if err := run("sudo", "systemctl", "daemon-reload"); err != nil {
+			return err
+		}
+		fmt.Println("Speiche enrollment deferred; run nabe configure edge --remote <url> --token <token> to start it")
+		return nil
+	}
+	if err := writeSpeicheEnv(opts.Remote, opts.Token); err != nil {
+		return err
+	}
+	if err := writeSpeicheUnit(); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "enable", "speiche"); err != nil {
+		return err
+	}
+	return run("sudo", "systemctl", "restart", "speiche")
+}
+
+func writeSpeicheEnv(remote string, token string) error {
 	hostname, _ := os.Hostname()
 	if hostname == "" {
 		hostname = "nabe-edge"
@@ -583,10 +658,11 @@ SPEICHE_STATE_DIR=/var/lib/nabe/speiche
 SPEICHE_HEARTBEAT_INTERVAL_SECONDS=30
 SPEICHE_HEARTBEAT_BACKOFF_AFTER_FAILURES=3
 SPEICHE_HEARTBEAT_MAX_INTERVAL_SECONDS=300
-`, shellValue(hostname), shellValue(opts.Remote), shellValue(opts.Token))
-	if err := writeRootFile("/etc/nabe/speiche.env", env, "0600"); err != nil {
-		return err
-	}
+`, shellValue(hostname), shellValue(remote), shellValue(token))
+	return writeRootFile("/etc/nabe/speiche.env", env, "0600")
+}
+
+func writeSpeicheUnit() error {
 	unit := `[Unit]
 Description=Speiche Nabe Edge Agent
 After=network-online.target AdGuardHome.service unbound.service
@@ -602,25 +678,18 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 `
-	if err := writeRootFile("/etc/systemd/system/speiche.service", unit, "0644"); err != nil {
-		return err
-	}
-	if err := run("sudo", "systemctl", "daemon-reload"); err != nil {
-		return err
-	}
-	if err := run("sudo", "systemctl", "enable", "speiche"); err != nil {
-		return err
-	}
-	return run("sudo", "systemctl", "restart", "speiche")
+	return writeRootFile("/etc/systemd/system/speiche.service", unit, "0644")
 }
 
-func runHealthChecks(edgeInstallOptions, hostFacts) error {
+func runHealthChecks(opts edgeInstallOptions, facts hostFacts) error {
 	checks := [][]string{
 		{"systemctl", "is-active", "unbound"},
 		{"systemctl", "is-active", "AdGuardHome"},
-		{"systemctl", "is-active", "speiche"},
 		{"dig", "+time=3", "+tries=1", "@127.0.0.1", "-p", "5335", "example.com"},
 		{"dig", "+time=3", "+tries=1", "@127.0.0.1", "example.com"},
+	}
+	if !opts.DeferEnrollment {
+		checks = append(checks, []string{"systemctl", "is-active", "speiche"})
 	}
 	for _, check := range checks {
 		if err := run("sudo", check...); err != nil {
