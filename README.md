@@ -72,6 +72,80 @@ The first real Nabe version is developed against a self-contained Compose stack 
 
 Zitadel setup is documented in [docs/zitadel.md](docs/zitadel.md). The Nabe authorization model is documented in [docs/authorization.md](docs/authorization.md).
 
+## Edge Install Guide
+
+The current edge target is a Raspberry Pi or similar Debian/Raspberry Pi OS host
+running the local DNS stack:
+
+- AdGuard Home on port `53` for LAN DNS.
+- Unbound on `127.0.0.1:5335` as the upstream recursive resolver.
+- Speiche as the outbound edge agent that enrolls with the Nabe API and sends
+  heartbeats.
+
+The central Nabe API must be reachable from the edge device. For the current
+LAN setup, use:
+
+```sh
+CENTRAL_API="http://10.0.0.230:8080"
+```
+
+Install the Nabe CLI on the edge:
+
+```sh
+curl -fsSL https://codeberg.org/KyleHub/nabe/raw/branch/main/install.sh | bash
+nabe version
+```
+
+Install and enroll in one step when the central URL and token are ready:
+
+```sh
+nabe install --edge \
+  --remote "$CENTRAL_API" \
+  --token "<edge-token>" \
+  --adguard-ui-alias adguard.home
+```
+
+Install first and enroll later when the central URL or token is not final:
+
+```sh
+nabe install --edge \
+  --defer-enrollment \
+  --adguard-ui-alias adguard.home
+
+nabe configure edge \
+  --remote "$CENTRAL_API" \
+  --token "<edge-token>"
+```
+
+`--adguard-ui-alias adguard.home` is optional. When enabled, the installer
+detects the edge LAN IP, binds the native AdGuard UI to that IP, creates a local
+DNS rewrite for `adguard.home`, and stores generated break-glass credentials in:
+
+```sh
+sudo cat /etc/nabe/adguard-ui.env
+```
+
+Verify the edge after install:
+
+```sh
+systemctl is-active unbound
+systemctl is-active AdGuardHome
+systemctl is-active speiche
+dig +short @127.0.0.1 -p 5335 example.com
+dig +short @127.0.0.1 example.com
+dig +short @127.0.0.1 blocked.nabe.test A
+```
+
+Useful edge files:
+
+- `/etc/nabe/speiche.env`: central API URL, enrollment token, Speiche settings.
+- `/etc/nabe/adguard-ui.env`: optional break-glass AdGuard UI URL and
+  credentials.
+- `/var/lib/nabe/speiche/identity.json`: stable edge identity.
+- `/opt/AdGuardHome/AdGuardHome.yaml`: generated AdGuard Home config.
+
+More detail is in [docs/edge-enrollment.md](docs/edge-enrollment.md).
+
 ## Licensing
 
 Nabe uses mixed licensing by package/component:
