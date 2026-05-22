@@ -3,6 +3,8 @@ package commands
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -44,13 +46,15 @@ func Run(args []string, cfg config.Config) error {
 }
 
 func usage() error {
-	return errors.New("usage: nabe <version|status|install --edge --remote <url> --token <token> [--adguard-ui-bind <addr:port>] [--adguard-dhcp --adguard-dhcp-interface <iface> --adguard-dhcp-gateway <ip> --adguard-dhcp-subnet <mask> --adguard-dhcp-range-start <ip> --adguard-dhcp-range-end <ip>]>")
+	return errors.New("usage: nabe <version|status|install --edge --remote <url> --token <token> [--adguard-ui-bind <addr:port>] [--adguard-ui-alias adguard.home] [--adguard-dhcp --adguard-dhcp-interface <iface> --adguard-dhcp-gateway <ip> --adguard-dhcp-subnet <mask> --adguard-dhcp-range-start <ip> --adguard-dhcp-range-end <ip>]>")
 }
 
 type edgeInstallOptions struct {
 	Remote                string
 	Token                 string
 	AdGuardUIBind         string
+	AdGuardUIAlias        string
+	AdGuardUIAliasIP      string
 	AdGuardAdminUser      string
 	AdGuardAdminPassword  string
 	AdGuardDHCPEnabled    bool
@@ -76,6 +80,8 @@ func runInstall(args []string) error {
 	remote := flags.String("remote", "", "Nabe central API URL")
 	token := flags.String("token", "", "dev edge token")
 	adGuardUIBind := flags.String("adguard-ui-bind", "127.0.0.1:3000", "AdGuard Home UI/API bind address")
+	adGuardUIAlias := flags.String("adguard-ui-alias", "", "optional local DNS name for break-glass AdGuard Home UI, for example adguard.home")
+	adGuardUIAliasIP := flags.String("adguard-ui-alias-ip", "", "optional IP for --adguard-ui-alias; defaults to the first non-loopback IPv4 address")
 	adGuardAdminUser := flags.String("adguard-admin-user", "", "AdGuard Home admin username; required for non-loopback UI binds")
 	adGuardAdminPassword := flags.String("adguard-admin-password", "", "AdGuard Home admin password; required for non-loopback UI binds")
 	adGuardDHCP := flags.Bool("adguard-dhcp", false, "enable AdGuard Home DHCP server")
@@ -94,6 +100,8 @@ func runInstall(args []string) error {
 		Remote:                *remote,
 		Token:                 *token,
 		AdGuardUIBind:         *adGuardUIBind,
+		AdGuardUIAlias:        *adGuardUIAlias,
+		AdGuardUIAliasIP:      *adGuardUIAliasIP,
 		AdGuardAdminUser:      *adGuardAdminUser,
 		AdGuardAdminPassword:  *adGuardAdminPassword,
 		AdGuardDHCPEnabled:    *adGuardDHCP,
@@ -103,11 +111,18 @@ func runInstall(args []string) error {
 		AdGuardDHCPRangeStart: *adGuardDHCPRangeStart,
 		AdGuardDHCPRangeEnd:   *adGuardDHCPRangeEnd,
 	}
-	if err := validateEdgeOptions(opts); err != nil {
+	if err := validateEdgeOptionSyntax(opts); err != nil {
 		return err
 	}
 	facts, err := detectHostFacts()
 	if err != nil {
+		return err
+	}
+	opts, err = prepareEdgeOptions(opts, facts)
+	if err != nil {
+		return err
+	}
+	if err := validateEdgeOptions(opts); err != nil {
 		return err
 	}
 	fmt.Printf("nabe edge bootstrap: os=%s arch=%s init=%s package=%s addresses=%s\n", facts.OS, facts.Architecture, facts.InitSystem, facts.PackageTool, strings.Join(facts.Addresses, ","))
@@ -125,6 +140,7 @@ func runInstall(args []string) error {
 		{"install runtime dependencies", installDependencies},
 		{"create nabe directories", createNabeDirectories},
 		{"configure unbound", configureUnbound},
+		{"write adguard break-glass metadata", writeAdGuardBreakglassMetadata},
 		{"install adguard home", installAdGuardHome},
 		{"install speiche", installSpeiche},
 		{"write speiche service", configureSpeiche},
@@ -140,6 +156,24 @@ func runInstall(args []string) error {
 }
 
 func validateEdgeOptions(opts edgeInstallOptions) error {
+	if strings.TrimSpace(opts.AdGuardUIBind) == "" {
+		opts.AdGuardUIBind = "127.0.0.1:3000"
+	}
+	if err := validateEdgeOptionSyntax(opts); err != nil {
+		return err
+	}
+	if !isLoopbackBind(opts.AdGuardUIBind) {
+		if strings.TrimSpace(opts.AdGuardAdminUser) == "" {
+			return errors.New("--adguard-admin-user is required when --adguard-ui-bind is not loopback")
+		}
+		if strings.TrimSpace(opts.AdGuardAdminPassword) == "" {
+			return errors.New("--adguard-admin-password is required when --adguard-ui-bind is not loopback")
+		}
+	}
+	return nil
+}
+
+func validateEdgeOptionSyntax(opts edgeInstallOptions) error {
 	if strings.TrimSpace(opts.AdGuardUIBind) == "" {
 		opts.AdGuardUIBind = "127.0.0.1:3000"
 	}
@@ -160,12 +194,12 @@ func validateEdgeOptions(opts edgeInstallOptions) error {
 	if err := validateBindAddress(opts.AdGuardUIBind); err != nil {
 		return fmt.Errorf("--adguard-ui-bind: %w", err)
 	}
-	if !isLoopbackBind(opts.AdGuardUIBind) {
-		if strings.TrimSpace(opts.AdGuardAdminUser) == "" {
-			return errors.New("--adguard-admin-user is required when --adguard-ui-bind is not loopback")
+	if strings.TrimSpace(opts.AdGuardUIAlias) != "" {
+		if err := validateLocalHostname(opts.AdGuardUIAlias); err != nil {
+			return fmt.Errorf("--adguard-ui-alias: %w", err)
 		}
-		if strings.TrimSpace(opts.AdGuardAdminPassword) == "" {
-			return errors.New("--adguard-admin-password is required when --adguard-ui-bind is not loopback")
+		if strings.TrimSpace(opts.AdGuardUIAliasIP) != "" && net.ParseIP(strings.TrimSpace(opts.AdGuardUIAliasIP)) == nil {
+			return errors.New("--adguard-ui-alias-ip must be a valid IP address")
 		}
 	}
 	if opts.AdGuardDHCPEnabled {
@@ -184,6 +218,71 @@ func validateEdgeOptions(opts edgeInstallOptions) error {
 		}
 	}
 	return nil
+}
+
+func prepareEdgeOptions(opts edgeInstallOptions, facts hostFacts) (edgeInstallOptions, error) {
+	if strings.TrimSpace(opts.AdGuardUIAlias) == "" {
+		return opts, nil
+	}
+	if strings.TrimSpace(opts.AdGuardUIAliasIP) == "" {
+		ip, err := firstNonLoopbackIPv4(facts.Addresses)
+		if err != nil {
+			return opts, err
+		}
+		opts.AdGuardUIAliasIP = ip
+	}
+	if isLoopbackBind(opts.AdGuardUIBind) {
+		_, port, err := net.SplitHostPort(opts.AdGuardUIBind)
+		if err != nil {
+			return opts, err
+		}
+		opts.AdGuardUIBind = net.JoinHostPort(opts.AdGuardUIAliasIP, port)
+	}
+	if strings.TrimSpace(opts.AdGuardAdminUser) == "" {
+		opts.AdGuardAdminUser = "nabe-admin"
+	}
+	if strings.TrimSpace(opts.AdGuardAdminPassword) == "" {
+		password, err := randomPassword()
+		if err != nil {
+			return opts, err
+		}
+		opts.AdGuardAdminPassword = password
+	}
+	return opts, nil
+}
+
+func validateLocalHostname(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 253 {
+		return errors.New("must be a non-empty DNS hostname")
+	}
+	if strings.ContainsAny(value, " /\\:@") {
+		return errors.New("must be a DNS hostname, not a URL")
+	}
+	for _, label := range strings.Split(value, ".") {
+		if label == "" || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return errors.New("contains an invalid label")
+		}
+	}
+	return nil
+}
+
+func firstNonLoopbackIPv4(addresses []string) (string, error) {
+	for _, value := range addresses {
+		host := value
+		if strings.Contains(value, "/") {
+			ip, _, err := net.ParseCIDR(value)
+			if err == nil {
+				host = ip.String()
+			}
+		}
+		ip := net.ParseIP(host)
+		if ip == nil || ip.To4() == nil || ip.IsLoopback() {
+			continue
+		}
+		return ip.String(), nil
+	}
+	return "", errors.New("could not detect a non-loopback IPv4 address for --adguard-ui-alias")
 }
 
 func validateBindAddress(value string) error {
@@ -246,6 +345,45 @@ func createNabeDirectories(edgeInstallOptions, hostFacts) error {
 		if err := run("sudo", "install", "-d", "-m", "0750", dir); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func writeAdGuardBreakglassMetadata(opts edgeInstallOptions, facts hostFacts) error {
+	if strings.TrimSpace(opts.AdGuardUIAlias) == "" && strings.TrimSpace(opts.AdGuardAdminUser) == "" {
+		return nil
+	}
+	_, port, err := net.SplitHostPort(opts.AdGuardUIBind)
+	if err != nil {
+		return err
+	}
+	urlHost := opts.AdGuardUIAlias
+	if strings.TrimSpace(urlHost) == "" {
+		host, _, err := net.SplitHostPort(opts.AdGuardUIBind)
+		if err != nil {
+			return err
+		}
+		urlHost = host
+	}
+	content := fmt.Sprintf(`ADGUARD_UI_URL=%s
+ADGUARD_UI_BIND=%s
+ADGUARD_UI_ALIAS=%s
+ADGUARD_UI_ALIAS_IP=%s
+ADGUARD_ADMIN_USER=%s
+ADGUARD_ADMIN_PASSWORD=%s
+`,
+		shellValue("http://"+net.JoinHostPort(urlHost, port)),
+		shellValue(opts.AdGuardUIBind),
+		shellValue(opts.AdGuardUIAlias),
+		shellValue(opts.AdGuardUIAliasIP),
+		shellValue(opts.AdGuardAdminUser),
+		shellValue(opts.AdGuardAdminPassword),
+	)
+	if err := writeRootFile("/etc/nabe/adguard-ui.env", content, "0600"); err != nil {
+		return err
+	}
+	if strings.TrimSpace(opts.AdGuardUIAlias) != "" {
+		fmt.Println("AdGuard break-glass UI metadata stored in /etc/nabe/adguard-ui.env")
 	}
 	return nil
 }
@@ -329,6 +467,8 @@ func adGuardHomeConfig(opts edgeInstallOptions) (string, error) {
 	}
 	dhcp := adGuardDHCPConfig(opts)
 
+	userRules := adGuardUserRules(opts)
+
 	return fmt.Sprintf(`http:
   address: %s
 %s
@@ -352,10 +492,29 @@ dns:
   cache_size: 4194304
 filters: []
 user_rules:
-  - "||blocked.nabe.test^"
+%s
 %s
 schema_version: 29
-`, opts.AdGuardUIBind, users, dhcp), nil
+`, opts.AdGuardUIBind, users, userRules, dhcp), nil
+}
+
+func adGuardUserRules(opts edgeInstallOptions) string {
+	rules := []string{`"||blocked.nabe.test^"`}
+	if strings.TrimSpace(opts.AdGuardUIAlias) != "" && strings.TrimSpace(opts.AdGuardUIAliasIP) != "" {
+		rule := fmt.Sprintf(
+			`"||%s^$dnsrewrite=NOERROR;A;%s"`,
+			strings.TrimSpace(opts.AdGuardUIAlias),
+			strings.TrimSpace(opts.AdGuardUIAliasIP),
+		)
+		rules = append(rules, rule)
+	}
+	var out strings.Builder
+	for _, rule := range rules {
+		out.WriteString("  - ")
+		out.WriteString(rule)
+		out.WriteByte('\n')
+	}
+	return strings.TrimRight(out.String(), "\n")
 }
 
 func adGuardDHCPConfig(opts edgeInstallOptions) string {
@@ -626,6 +785,14 @@ func shellValue(value string) string {
 
 func yamlScalar(value string) string {
 	return strconv.Quote(value)
+}
+
+func randomPassword() (string, error) {
+	bytes := make([]byte, 24)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 func getenv(key string, fallback string) string {

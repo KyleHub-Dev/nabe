@@ -32,6 +32,18 @@
     };
   };
 
+  type EdgeNode = {
+    nodeId: string;
+    nodeName: string;
+    hostname: string;
+    architecture: string;
+    os: string;
+    kernel: string;
+    speicheVersion: string;
+    healthStatus: string;
+    lastSeenAt: string;
+  };
+
   type View = 'overview' | 'cloudDns';
 
   let language: Language = 'de';
@@ -40,6 +52,9 @@
   let dashboard: Dashboard | null = null;
   let loading = true;
   let dashboardError = '';
+  let nabeStatusError = '';
+  let edgeNodes: EdgeNode[] = [];
+  let permissions: string[] = [];
   const apiUrl = import.meta.env.VITE_NABE_API_URL ?? 'http://localhost:8080';
   const copy = {
     de: {
@@ -166,11 +181,30 @@
         return;
       }
       dashboard = await response.json();
+      await loadNabeStatus();
     } catch (error) {
       dashboard = null;
       dashboardError = error instanceof Error ? error.message : 'unbekannter Fehler';
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadNabeStatus() {
+    nabeStatusError = '';
+    try {
+      const [nodes, permissionState] = await Promise.all([
+        fetch(`${apiUrl}/api/edge/nodes`, { credentials: 'include' }).then((r) =>
+          r.ok ? r.json() : { nodes: [] }
+        ),
+        fetch(`${apiUrl}/api/permissions/me`, { credentials: 'include' }).then((r) =>
+          r.ok ? r.json() : { effective: { permissions: [] } }
+        )
+      ]);
+      edgeNodes = nodes.nodes ?? [];
+      permissions = permissionState.effective?.permissions ?? [];
+    } catch (error) {
+      nabeStatusError = error instanceof Error ? error.message : 'load failed';
     }
   }
 
@@ -181,6 +215,8 @@
   async function signOut() {
     await fetch(`${apiUrl}/auth/logout`, { method: 'POST', credentials: 'include' });
     dashboard = null;
+    edgeNodes = [];
+    permissions = [];
   }
 </script>
 
@@ -270,6 +306,37 @@
         </section>
 
         <section class="overview-grid">
+          <article class="panel wide">
+            <div class="panel-head">
+              <h2>Permissions</h2>
+              <span>{dashboard.principal.roles.join(', ')}</span>
+            </div>
+            <ul class="plain-list">
+              {#each permissions as permission}
+                <li><span>{permission}</span><strong>allowed</strong></li>
+              {:else}
+                <li><span>none loaded</span><strong>empty</strong></li>
+              {/each}
+            </ul>
+          </article>
+
+          <article class="panel wide">
+            <div class="panel-head">
+              <h2>Edge nodes ({edgeNodes.length})</h2>
+              {#if nabeStatusError}<span>{nabeStatusError}</span>{/if}
+            </div>
+            <ul class="plain-list">
+              {#each edgeNodes as node}
+                <li>
+                  <span>{node.nodeName} / {node.hostname}</span>
+                  <strong>{node.healthStatus}</strong>
+                </li>
+              {:else}
+                <li><span>none enrolled</span><strong>empty</strong></li>
+              {/each}
+            </ul>
+          </article>
+
           <article class="panel wide">
             <div class="panel-head">
               <h2>{text.systemOverview}</h2>

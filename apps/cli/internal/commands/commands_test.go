@@ -126,3 +126,54 @@ func TestAdGuardHomeConfigCanEnableDHCP(t *testing.T) {
 		}
 	}
 }
+
+func TestPrepareEdgeOptionsPublishesExplicitAdGuardAlias(t *testing.T) {
+	opts, err := prepareEdgeOptions(edgeInstallOptions{
+		AdGuardUIBind:  "127.0.0.1:3000",
+		AdGuardUIAlias: "adguard.home",
+	}, hostFacts{Addresses: []string{"127.0.0.1/8", "10.0.0.10/24"}})
+	if err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+	if opts.AdGuardUIBind != "10.0.0.10:3000" {
+		t.Fatalf("expected UI bind to use detected LAN IP, got %q", opts.AdGuardUIBind)
+	}
+	if opts.AdGuardAdminUser == "" || opts.AdGuardAdminPassword == "" {
+		t.Fatalf("expected generated break-glass credentials")
+	}
+}
+
+func TestPrepareEdgeOptionsGeneratesCredentialsForExplicitAliasBind(t *testing.T) {
+	opts, err := prepareEdgeOptions(edgeInstallOptions{
+		Remote:           "http://10.0.0.230:8080",
+		Token:            "dev-token",
+		AdGuardUIBind:    "10.0.0.10:3000",
+		AdGuardUIAlias:   "adguard.home",
+		AdGuardUIAliasIP: "10.0.0.10",
+	}, hostFacts{Addresses: []string{"10.0.0.10/24"}})
+	if err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+	if err := validateEdgeOptions(opts); err != nil {
+		t.Fatalf("prepared options should validate: %v", err)
+	}
+	if opts.AdGuardAdminUser == "" || opts.AdGuardAdminPassword == "" {
+		t.Fatalf("expected generated break-glass credentials")
+	}
+}
+
+func TestAdGuardHomeConfigAddsAliasDnsRewrite(t *testing.T) {
+	config, err := adGuardHomeConfig(edgeInstallOptions{
+		AdGuardUIBind:        "10.0.0.10:3000",
+		AdGuardUIAlias:       "adguard.home",
+		AdGuardUIAliasIP:     "10.0.0.10",
+		AdGuardAdminUser:     "nabe-admin",
+		AdGuardAdminPassword: "secret",
+	})
+	if err != nil {
+		t.Fatalf("config failed: %v", err)
+	}
+	if !strings.Contains(config, `||adguard.home^$dnsrewrite=NOERROR;A;10.0.0.10`) {
+		t.Fatalf("expected adguard.home DNS rewrite in config")
+	}
+}

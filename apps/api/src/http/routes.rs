@@ -11,7 +11,11 @@ use time::{Duration, OffsetDateTime};
 use nabe_adguard_adapter::AdguardAdapterError;
 
 use crate::{
-    auth::{self, session, Principal},
+    auth::{
+        self,
+        authorization::{self, EDGE_READ, PLATFORM_ADMIN, QUERYLOG_READ_TENANT, STATS_READ_TENANT},
+        session, Principal,
+    },
     db::repositories::{EdgeNodeInput, EdgeNodeRecord},
     error::ApiError,
     state::AppState,
@@ -25,6 +29,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/callback", get(auth_callback))
         .route("/auth/logout", post(auth_logout).get(auth_logout))
         .route("/api/session", get(session_me))
+        .route("/api/permissions/me", get(permissions_me))
         .route("/api/dashboard", get(dashboard))
         .route("/api/engine/status", get(engine_status))
         .route("/api/engine/adguard/status", get(adguard_status))
@@ -166,11 +171,51 @@ async fn session_me(
     }))
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PermissionsResponse {
+    principal: Principal,
+    effective: authorization::EffectivePermissions,
+}
+
+async fn permissions_me(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<PermissionsResponse>, ApiError> {
+    let principal = session::read_principal(&headers, &state.config.session_secret)?;
+    Ok(Json(PermissionsResponse {
+        effective: authorization::effective_permissions(&principal),
+        principal,
+    }))
+}
+
+fn authorize(
+    state: &AppState,
+    headers: &HeaderMap,
+    permission: &'static str,
+) -> Result<Principal, ApiError> {
+    let principal = session::read_principal(headers, &state.config.session_secret)?;
+    authorization::require(&principal, permission)?;
+    Ok(principal)
+}
+
+fn audit_control_read(principal: &Principal, action: &'static str, resource: &str) {
+    tracing::info!(
+        action,
+        resource,
+        provider = %principal.provider,
+        subject = %principal.subject,
+        roles = ?principal.roles,
+        outcome = "allowed",
+        "control-plane read"
+    );
+}
+
 async fn dashboard(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<DashboardResponse>, ApiError> {
-    let principal = session::read_principal(&headers, &state.config.session_secret)?;
+    let principal = authorize(&state, &headers, EDGE_READ)?;
     tracing::info!(
         provider = %principal.provider,
         subject = %principal.subject,
@@ -207,7 +252,8 @@ async fn engine_status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<EngineStatus>, ApiError> {
-    let _ = session::read_principal(&headers, &state.config.session_secret)?;
+    let principal = authorize(&state, &headers, EDGE_READ)?;
+    audit_control_read(&principal, "engine.status", "cloud-dns");
     Ok(Json(load_engine_status(&state).await?))
 }
 
@@ -215,7 +261,8 @@ async fn adguard_status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let _ = session::read_principal(&headers, &state.config.session_secret)?;
+    let principal = authorize(&state, &headers, EDGE_READ)?;
+    audit_control_read(&principal, "engine.adguard.status", "cloud-dns");
     state
         .adguard
         .raw_get("status")
@@ -228,7 +275,8 @@ async fn adguard_stats(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let _ = session::read_principal(&headers, &state.config.session_secret)?;
+    let principal = authorize(&state, &headers, STATS_READ_TENANT)?;
+    audit_control_read(&principal, "engine.adguard.stats", "cloud-dns");
     state
         .adguard
         .raw_get("stats")
@@ -241,7 +289,8 @@ async fn adguard_querylog(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let _ = session::read_principal(&headers, &state.config.session_secret)?;
+    let principal = authorize(&state, &headers, QUERYLOG_READ_TENANT)?;
+    audit_control_read(&principal, "engine.adguard.querylog", "cloud-dns");
     state
         .adguard
         .raw_get("querylog")
@@ -252,7 +301,10 @@ async fn adguard_querylog(
 
 async fn dev_edge_token(
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<DevEdgeTokenResponse>, ApiError> {
+    let principal = authorize(&state, &headers, PLATFORM_ADMIN)?;
+    audit_control_read(&principal, "dev.edge_token", "dev");
     Ok(Json(DevEdgeTokenResponse {
         configured: state.config.dev_edge_token.is_some(),
         token: state.config.dev_edge_token.clone(),
@@ -260,8 +312,13 @@ async fn dev_edge_token(
     }))
 }
 
-async fn edge_nodes(State(state): State<AppState>) -> Result<Json<EdgeNodesResponse>, ApiError> {
+async fn edge_nodes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<EdgeNodesResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_READ)?;
     let config = state.config.clone();
+    audit_control_read(&principal, "edge.nodes", "all");
     Ok(Json(EdgeNodesResponse {
         nodes: state
             .db

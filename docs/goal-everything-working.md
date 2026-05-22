@@ -181,8 +181,9 @@ Required edge behavior:
 
 - `install.sh` installs the `nabe` CLI on Raspberry Pi OS Lite.
 - `nabe version` works on the Pi.
-- `nabe install --edge --remote <central-url> --token <token>` bootstraps the
-  Pi or reports an actionable failure.
+- `nabe install --edge --remote <central-url> --token <token>
+  --adguard-ui-alias adguard.home` bootstraps the Pi or reports an actionable
+  failure.
 - Edge install rejects `localhost`, `127.0.0.1`, and `::1` central URLs.
 - Edge install detects OS, architecture, init system, network address, and
   package tool.
@@ -351,9 +352,12 @@ Central local checks:
 ```sh
 curl -fsS http://127.0.0.1:8080/health
 curl -fsS http://127.0.0.1:8080/ready
-curl -fsS http://127.0.0.1:8080/api/dev/edge-token
-curl -fsS http://127.0.0.1:8080/api/edge/nodes
 ```
+
+The dev edge token and edge-node inventory endpoints require an authenticated
+platform-admin session. For edge bootstrap, read the configured token from the
+central environment or secret store rather than exposing it unauthenticated over
+HTTP.
 
 Pi-to-central checks:
 
@@ -368,7 +372,7 @@ Pi bootstrap checks:
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'curl -fsSL http://<current-workstation-lan-ip>:8080/health'
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'curl -fsSL https://codeberg.org/KyleHub/nabe/raw/branch/main/install.sh | bash'
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe version'
-ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe install --edge --remote "http://<current-workstation-lan-ip>:8080" --token "<dev-token>"'
+ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe install --edge --remote "http://<current-workstation-lan-ip>:8080" --token "<dev-token>" --adguard-ui-alias adguard.home'
 ```
 
 Pi service checks:

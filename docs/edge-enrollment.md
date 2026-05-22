@@ -28,6 +28,10 @@ Edge AdGuard UI defaults:
 
 - `nabe install --edge` binds the AdGuard Home UI/API to
   `127.0.0.1:3000` by default.
+- A local break-glass alias can be enabled with
+  `--adguard-ui-alias adguard.home`. This adds a local AdGuard DNS rewrite,
+  publishes the UI on the edge LAN IP, and stores generated credentials in
+  `/etc/nabe/adguard-ui.env`.
 - A LAN-visible UI requires an explicit bind such as
   `--adguard-ui-bind 0.0.0.0:3000`.
 - Any non-loopback UI bind also requires `--adguard-admin-user` and
