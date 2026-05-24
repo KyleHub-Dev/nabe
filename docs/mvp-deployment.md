@@ -24,6 +24,11 @@ The API talks to AdGuard Home on the internal Compose network:
 ADGUARD_BASE_URL=http://dns-adguard:3000
 ```
 
+AdGuard forwards normal DNS resolution to the internal Unbound container at
+`172.30.10.10:53`. The checked-in development config also keeps `8.8.8.8` as a
+fallback resolver for local debugging if Unbound is unavailable, and enables
+bounded optimistic caching with a maximum cache TTL of 3600 seconds.
+
 The browser talks to Nabe only. It must not receive AdGuard credentials.
 
 ## Public Exposure Defaults
