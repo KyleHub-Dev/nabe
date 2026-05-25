@@ -14,9 +14,9 @@
   "dependencies": {
     "@nabe/validation": "workspace:*",
     "@sveltejs/adapter-auto": "^3.3.1",
-    "@sveltejs/kit": "^2.15.0",
+    "@sveltejs/kit": "^2.61.1",
     "@sveltejs/vite-plugin-svelte": "^4.0.4",
-    "svelte": "^5.15.0",
+    "svelte": "^5.55.9",
     "vite": "^5.4.11"
   },
   "devDependencies": {
