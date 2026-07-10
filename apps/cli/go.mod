@@ -1,5 +1,5 @@
 module codeberg.org/KyleHub/nabe/apps/cli
 
-go 1.22
+go 1.25.0
 
-require golang.org/x/crypto v0.31.0
+require golang.org/x/crypto v0.52.0
