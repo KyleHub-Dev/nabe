@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect},
     routing::{get, post},
@@ -13,10 +13,15 @@ use nabe_adguard_adapter::AdguardAdapterError;
 use crate::{
     auth::{
         self,
-        authorization::{self, EDGE_READ, PLATFORM_ADMIN, QUERYLOG_READ_TENANT, STATS_READ_TENANT},
+        authorization::{
+            self, EDGE_MANAGE, EDGE_READ, PLATFORM_ADMIN, QUERYLOG_READ_TENANT, STATS_READ_TENANT,
+        },
         session, Principal,
     },
-    db::repositories::{EdgeNodeInput, EdgeNodeRecord},
+    db::repositories::{
+        DeviceClientInput, DeviceClientRecord, DnsPolicyInput, DnsPolicyRecord, EdgeNodeInput,
+        EdgeNodeRecord,
+    },
     error::ApiError,
     state::AppState,
 };
@@ -39,6 +44,23 @@ pub fn router() -> Router<AppState> {
         .route("/api/edge/enroll", post(edge_enroll))
         .route("/api/edge/heartbeat", post(edge_heartbeat))
         .route("/api/edge/nodes", get(edge_nodes))
+        .route(
+            "/api/device-clients",
+            get(device_clients_list).post(device_clients_create),
+        )
+        .route(
+            "/api/device-clients/{id}",
+            get(device_clients_get).put(device_clients_update),
+        )
+        .route(
+            "/api/dns-policies",
+            get(dns_policies_list).post(dns_policies_create),
+        )
+        .route(
+            "/api/dns-policies/{id}",
+            get(dns_policies_get).put(dns_policies_update),
+        )
+        .route("/api/dns-policies/apply", post(dns_policies_apply))
 }
 
 #[derive(Serialize)]
@@ -381,6 +403,324 @@ async fn upsert_edge_node(
         .await
 }
 
+fn audit_control_write(principal: &Principal, action: &'static str, resource: &str) {
+    tracing::info!(
+        action,
+        resource,
+        provider = %principal.provider,
+        subject = %principal.subject,
+        roles = ?principal.roles,
+        outcome = "allowed",
+        "control-plane write"
+    );
+}
+
+async fn device_clients_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<DeviceClientsResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_READ)?;
+    audit_control_read(&principal, "device_clients.list", "all");
+    Ok(Json(DeviceClientsResponse {
+        clients: state
+            .db
+            .list_device_clients()
+            .await?
+            .into_iter()
+            .map(DeviceClientResponse::from_record)
+            .collect(),
+    }))
+}
+
+async fn device_clients_get(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<DeviceClientResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_READ)?;
+    audit_control_read(&principal, "device_clients.get", &id);
+    Ok(Json(DeviceClientResponse::from_record(
+        state.db.device_client(&id).await?,
+    )))
+}
+
+async fn device_clients_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<DeviceClientCreateRequest>,
+) -> Result<Json<DeviceClientResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_MANAGE)?;
+    let label = validate_label(&request.label)?;
+    let client_id = validate_client_id(&request.client_id)?;
+    if state
+        .db
+        .device_client_by_client_id(&client_id)
+        .await?
+        .is_some()
+    {
+        return Err(ApiError::BadRequest);
+    }
+    let input = DeviceClientInput {
+        id: uuid::Uuid::new_v4().to_string(),
+        label,
+        owner_scope: normalize_owner_scope(request.owner_scope.as_deref()),
+        client_id,
+        enabled: request.enabled.unwrap_or(true),
+    };
+    audit_control_write(&principal, "device_clients.create", &input.id);
+    Ok(Json(DeviceClientResponse::from_record(
+        state.db.create_device_client(&input).await?,
+    )))
+}
+
+async fn device_clients_update(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<DeviceClientUpdateRequest>,
+) -> Result<Json<DeviceClientResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_MANAGE)?;
+    let existing = state.db.device_client(&id).await?;
+    let label = match request.label {
+        Some(value) => validate_label(&value)?,
+        None => existing.label,
+    };
+    let client_id = match request.client_id {
+        Some(value) => validate_client_id(&value)?,
+        None => existing.client_id.clone(),
+    };
+    if client_id != existing.client_id {
+        if let Some(other) = state.db.device_client_by_client_id(&client_id).await? {
+            if other.id != id {
+                return Err(ApiError::BadRequest);
+            }
+        }
+    }
+    let input = DeviceClientInput {
+        id: id.clone(),
+        label,
+        owner_scope: match request.owner_scope {
+            Some(value) => normalize_owner_scope(Some(&value)),
+            None => existing.owner_scope,
+        },
+        client_id,
+        enabled: request.enabled.unwrap_or(existing.enabled),
+    };
+    audit_control_write(&principal, "device_clients.update", &id);
+    Ok(Json(DeviceClientResponse::from_record(
+        state.db.update_device_client(&input).await?,
+    )))
+}
+
+async fn dns_policies_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<DnsPoliciesResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_READ)?;
+    audit_control_read(&principal, "dns_policies.list", "all");
+    Ok(Json(DnsPoliciesResponse {
+        policies: state
+            .db
+            .list_dns_policies()
+            .await?
+            .into_iter()
+            .map(DnsPolicyResponse::from_record)
+            .collect(),
+    }))
+}
+
+async fn dns_policies_get(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<DnsPolicyResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_READ)?;
+    audit_control_read(&principal, "dns_policies.get", &id);
+    Ok(Json(DnsPolicyResponse::from_record(
+        state.db.dns_policy(&id).await?,
+    )))
+}
+
+async fn dns_policies_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<DnsPolicyCreateRequest>,
+) -> Result<Json<DnsPolicyResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_MANAGE)?;
+    let name = validate_label(&request.name)?;
+    let blocked_domains = validate_blocked_domains(&request.blocked_domains)?;
+    let input = DnsPolicyInput {
+        id: uuid::Uuid::new_v4().to_string(),
+        name,
+        blocked_domains_json: serde_json::to_string(&blocked_domains)
+            .map_err(|_| ApiError::Internal)?,
+        enabled: request.enabled.unwrap_or(true),
+    };
+    audit_control_write(&principal, "dns_policies.create", &input.id);
+    Ok(Json(DnsPolicyResponse::from_record(
+        state.db.create_dns_policy(&input).await?,
+    )))
+}
+
+async fn dns_policies_update(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<DnsPolicyUpdateRequest>,
+) -> Result<Json<DnsPolicyResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_MANAGE)?;
+    let existing = state.db.dns_policy(&id).await?;
+    let name = match request.name {
+        Some(value) => validate_label(&value)?,
+        None => existing.name,
+    };
+    let blocked_domains_json = match request.blocked_domains {
+        Some(domains) => serde_json::to_string(&validate_blocked_domains(&domains)?)
+            .map_err(|_| ApiError::Internal)?,
+        None => existing.blocked_domains_json,
+    };
+    let input = DnsPolicyInput {
+        id: id.clone(),
+        name,
+        blocked_domains_json,
+        enabled: request.enabled.unwrap_or(existing.enabled),
+    };
+    audit_control_write(&principal, "dns_policies.update", &id);
+    Ok(Json(DnsPolicyResponse::from_record(
+        state.db.update_dns_policy(&input).await?,
+    )))
+}
+
+async fn dns_policies_apply(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<DnsPolicyApplyResponse>, ApiError> {
+    let principal = authorize(&state, &headers, EDGE_MANAGE)?;
+    audit_control_write(&principal, "dns_policies.apply", "cloud-dns");
+
+    let policies: Vec<DnsPolicyRecord> = state
+        .db
+        .list_dns_policies()
+        .await?
+        .into_iter()
+        .filter(|policy| policy.enabled)
+        .collect();
+    let active_client_ids: Vec<String> = state
+        .db
+        .list_device_clients()
+        .await?
+        .into_iter()
+        .filter(|client| client.enabled)
+        .map(|client| client.client_id)
+        .collect();
+    let rules = compose_block_rules(&policies)?;
+
+    state
+        .adguard
+        .post_json(
+            "filtering/set_rules",
+            &serde_json::json!({ "rules": rules }),
+        )
+        .await
+        .map_err(map_adguard_error)?;
+
+    let applied_policy_ids: Vec<String> = policies.into_iter().map(|policy| policy.id).collect();
+    state
+        .db
+        .mark_dns_policies_applied(&applied_policy_ids)
+        .await?;
+
+    Ok(Json(DnsPolicyApplyResponse {
+        applied_policy_ids,
+        rules,
+        active_client_ids,
+        applied_at: now_rfc3339(),
+    }))
+}
+
+fn compose_block_rules(policies: &[DnsPolicyRecord]) -> Result<Vec<String>, ApiError> {
+    let mut domains = Vec::new();
+    for policy in policies {
+        let parsed: Vec<String> =
+            serde_json::from_str(&policy.blocked_domains_json).map_err(|error| {
+                tracing::error!(?error, policy_id = %policy.id, "stored blocked domains are invalid");
+                ApiError::Internal
+            })?;
+        domains.extend(parsed);
+    }
+    domains.sort_unstable();
+    domains.dedup();
+    Ok(domains
+        .into_iter()
+        .map(|domain| format!("||{domain}^"))
+        .collect())
+}
+
+fn validate_label(value: &str) -> Result<String, ApiError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.len() > 120 {
+        return Err(ApiError::BadRequest);
+    }
+    Ok(trimmed.to_string())
+}
+
+fn normalize_owner_scope(value: Option<&str>) -> String {
+    let trimmed = value.unwrap_or("").trim();
+    if trimmed.is_empty() {
+        "default".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn validate_client_id(value: &str) -> Result<String, ApiError> {
+    let normalized = value.trim().to_ascii_lowercase();
+    let valid_length = (1..=64).contains(&normalized.len());
+    let valid_chars = normalized
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if !valid_length || !valid_chars || normalized.starts_with('-') || normalized.ends_with('-') {
+        return Err(ApiError::BadRequest);
+    }
+    Ok(normalized)
+}
+
+fn validate_blocked_domains(domains: &[String]) -> Result<Vec<String>, ApiError> {
+    if domains.is_empty() {
+        return Err(ApiError::BadRequest);
+    }
+    let mut normalized = Vec::new();
+    for domain in domains {
+        normalized.push(validate_domain(domain)?);
+    }
+    normalized.sort_unstable();
+    normalized.dedup();
+    Ok(normalized)
+}
+
+fn validate_domain(value: &str) -> Result<String, ApiError> {
+    let normalized = value.trim().trim_end_matches('.').to_ascii_lowercase();
+    if normalized.is_empty() || normalized.len() > 253 || !normalized.contains('.') {
+        return Err(ApiError::BadRequest);
+    }
+    for segment in normalized.split('.') {
+        let valid_length = (1..=63).contains(&segment.len());
+        let valid_chars = segment
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        if !valid_length || !valid_chars || segment.starts_with('-') || segment.ends_with('-') {
+            return Err(ApiError::BadRequest);
+        }
+    }
+    Ok(normalized)
+}
+
+fn now_rfc3339() -> String {
+    OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
 fn verify_edge_token(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
     let expected = state
         .config
@@ -468,6 +808,115 @@ struct EdgeNodeRequest {
     speiche_version: String,
     health_status: String,
     inventory: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceClientCreateRequest {
+    label: String,
+    owner_scope: Option<String>,
+    client_id: String,
+    enabled: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceClientUpdateRequest {
+    label: Option<String>,
+    owner_scope: Option<String>,
+    client_id: Option<String>,
+    enabled: Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceClientsResponse {
+    clients: Vec<DeviceClientResponse>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceClientResponse {
+    id: String,
+    label: String,
+    owner_scope: String,
+    client_id: String,
+    enabled: bool,
+    created_at: String,
+    updated_at: String,
+}
+
+impl DeviceClientResponse {
+    fn from_record(record: DeviceClientRecord) -> Self {
+        Self {
+            id: record.id,
+            label: record.label,
+            owner_scope: record.owner_scope,
+            client_id: record.client_id,
+            enabled: record.enabled,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DnsPolicyCreateRequest {
+    name: String,
+    blocked_domains: Vec<String>,
+    enabled: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DnsPolicyUpdateRequest {
+    name: Option<String>,
+    blocked_domains: Option<Vec<String>>,
+    enabled: Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DnsPoliciesResponse {
+    policies: Vec<DnsPolicyResponse>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DnsPolicyResponse {
+    id: String,
+    name: String,
+    blocked_domains: Vec<String>,
+    enabled: bool,
+    last_applied_at: Option<String>,
+    created_at: String,
+    updated_at: String,
+}
+
+impl DnsPolicyResponse {
+    fn from_record(record: DnsPolicyRecord) -> Self {
+        let blocked_domains =
+            serde_json::from_str(&record.blocked_domains_json).unwrap_or_default();
+        Self {
+            id: record.id,
+            name: record.name,
+            blocked_domains,
+            enabled: record.enabled,
+            last_applied_at: record.last_applied_at,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DnsPolicyApplyResponse {
+    applied_policy_ids: Vec<String>,
+    rules: Vec<String>,
+    active_client_ids: Vec<String>,
+    applied_at: String,
 }
 
 #[derive(Serialize)]
@@ -562,6 +1011,89 @@ fn map_adguard_error(error: AdguardAdapterError) -> ApiError {
         AdguardAdapterError::AuthFailed => ApiError::AdguardAuthFailed,
         AdguardAdapterError::Unreachable => ApiError::AdguardUnreachable,
         AdguardAdapterError::BadResponse => ApiError::BadUpstreamResponse,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        compose_block_rules, validate_blocked_domains, validate_client_id, validate_domain,
+        validate_label,
+    };
+    use crate::db::repositories::DnsPolicyRecord;
+
+    fn policy(id: &str, domains: &str, enabled: bool) -> DnsPolicyRecord {
+        DnsPolicyRecord {
+            id: id.to_string(),
+            name: format!("policy {id}"),
+            blocked_domains_json: domains.to_string(),
+            enabled,
+            last_applied_at: None,
+            created_at: "2026-07-11T00:00:00Z".to_string(),
+            updated_at: "2026-07-11T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn compose_block_rules_is_deterministic_and_deduplicated() {
+        let policies = vec![
+            policy("a", r#"["blocked.nabe.test","ads.example.com"]"#, true),
+            policy("b", r#"["blocked.nabe.test"]"#, true),
+        ];
+        let rules = compose_block_rules(&policies).expect("rules");
+        assert_eq!(
+            rules,
+            vec![
+                "||ads.example.com^".to_string(),
+                "||blocked.nabe.test^".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn compose_block_rules_rejects_corrupt_stored_domains() {
+        let policies = vec![policy("a", "not-json", true)];
+        assert!(compose_block_rules(&policies).is_err());
+    }
+
+    #[test]
+    fn domain_validation_normalizes_and_rejects_invalid_names() {
+        assert_eq!(
+            validate_domain(" Blocked.Nabe.Test. ").expect("domain"),
+            "blocked.nabe.test"
+        );
+        assert!(validate_domain("no-dot").is_err());
+        assert!(validate_domain("bad domain.example").is_err());
+        assert!(validate_domain("-leading.example.com").is_err());
+        assert!(validate_domain("").is_err());
+    }
+
+    #[test]
+    fn blocked_domains_require_at_least_one_entry() {
+        assert!(validate_blocked_domains(&[]).is_err());
+        let normalized = validate_blocked_domains(&[
+            "blocked.nabe.test".to_string(),
+            "BLOCKED.nabe.test".to_string(),
+        ])
+        .expect("domains");
+        assert_eq!(normalized, vec!["blocked.nabe.test".to_string()]);
+    }
+
+    #[test]
+    fn client_id_validation_enforces_adguard_clientid_charset() {
+        assert_eq!(validate_client_id(" Pixel-8 ").expect("id"), "pixel-8");
+        assert!(validate_client_id("bad_id").is_err());
+        assert!(validate_client_id("-bad").is_err());
+        assert!(validate_client_id("").is_err());
+    }
+
+    #[test]
+    fn label_validation_trims_and_rejects_empty() {
+        assert_eq!(
+            validate_label(" Living Room TV ").expect("label"),
+            "Living Room TV"
+        );
+        assert!(validate_label("   ").is_err());
     }
 }
 

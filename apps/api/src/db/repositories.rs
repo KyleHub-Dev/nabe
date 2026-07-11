@@ -21,6 +21,45 @@ pub struct EdgeNodeInput {
 }
 
 #[derive(Debug, Clone)]
+pub struct DeviceClientInput {
+    pub id: String,
+    pub label: String,
+    pub owner_scope: String,
+    pub client_id: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeviceClientRecord {
+    pub id: String,
+    pub label: String,
+    pub owner_scope: String,
+    pub client_id: String,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DnsPolicyInput {
+    pub id: String,
+    pub name: String,
+    pub blocked_domains_json: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct DnsPolicyRecord {
+    pub id: String,
+    pub name: String,
+    pub blocked_domains_json: String,
+    pub enabled: bool,
+    pub last_applied_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct EdgeNodeRecord {
     pub id: String,
     pub name: String,
