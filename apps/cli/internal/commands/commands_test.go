@@ -1,8 +1,13 @@
 package commands
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestValidateEdgeOptionsRejectsLocalhost(t *testing.T) {
@@ -47,9 +52,56 @@ func TestValidateEdgeOptionsRejectsDeferredEnrollmentWithRemote(t *testing.T) {
 	}
 }
 
+func TestValidateEdgeOptionsAllowsReuseEnrollmentWithNewRemote(t *testing.T) {
+	err := validateEdgeOptionSyntax(edgeInstallOptions{
+		Remote:          "http://nabe.local:8080",
+		ReuseEnrollment: true,
+	})
+	if err != nil {
+		t.Fatalf("expected enrollment reuse to accept a replacement remote: %v", err)
+	}
+}
+
+func TestValidateEdgeOptionsRejectsReuseEnrollmentWithToken(t *testing.T) {
+	err := validateEdgeOptionSyntax(edgeInstallOptions{
+		Token:           "replacement-token",
+		ReuseEnrollment: true,
+	})
+	if err == nil {
+		t.Fatal("expected enrollment reuse with an explicit token to be rejected")
+	}
+}
+
 func TestUnboundConfigUsesExplicitPort(t *testing.T) {
-	if !strings.Contains(unboundConfig, "interface: 127.0.0.1\n  port: 5335") {
+	config := unboundConfig(false)
+	if !strings.Contains(config, "interface: 127.0.0.1\n  port: 5335") {
 		t.Fatalf("unbound config must bind the local resolver on 127.0.0.1:5335")
+	}
+}
+
+func TestUnboundConfigUsesResilientStrictDefaults(t *testing.T) {
+	config := unboundConfig(false)
+	for _, want := range []string{
+		"do-ip6: no",
+		"edns-buffer-size: 1232",
+		"prefetch: yes",
+		"prefetch-key: yes",
+		`module-config: "validator iterator"`,
+		"serve-expired: yes",
+		"serve-expired-ttl: 86400",
+		"serve-expired-client-timeout: 1800",
+		"val-permissive-mode: no",
+		"log-servfail: yes",
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("unbound config missing %q", want)
+		}
+	}
+}
+
+func TestUnboundConfigEnablesIPv6OnlyWithDefaultRoute(t *testing.T) {
+	if !strings.Contains(unboundConfig(true), "do-ip6: yes") {
+		t.Fatal("expected IPv6 recursion with an IPv6 default route")
 	}
 }
 
@@ -63,6 +115,69 @@ func TestAdGuardHomeConfigBindsUIToLoopback(t *testing.T) {
 	}
 	if !strings.Contains(config, "users: []") {
 		t.Fatalf("loopback-only AdGuard Home UI may omit users for local dev")
+	}
+	for _, want := range []string{
+		"upstream_dns:\n    - 127.0.0.1:5335",
+		"fallback_dns:\n    - https://1.1.1.1/dns-query",
+		"upstream_timeout: 5s",
+		"enable_dnssec: true",
+		"ratelimit: 100",
+		"cache_optimistic: true",
+		"allowed_clients:",
+		"pending_requests:\n    enabled: true",
+		"querylog:\n  enabled: true",
+		"interval: 168h",
+		"url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt",
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("AdGuard Home config missing %q", want)
+		}
+	}
+}
+
+func TestParseGeneratedEnv(t *testing.T) {
+	values := parseGeneratedEnv("ADGUARD_UI_ALIAS='adguard.home'\nADGUARD_ADMIN_PASSWORD='secret'\n")
+	if values["ADGUARD_UI_ALIAS"] != "adguard.home" || values["ADGUARD_ADMIN_PASSWORD"] != "secret" {
+		t.Fatalf("unexpected parsed values: %#v", values)
+	}
+}
+
+func TestPreserveExistingDHCPShape(t *testing.T) {
+	var snapshot adGuardConfigSnapshot
+	err := yaml.Unmarshal([]byte(`dhcp:
+  enabled: true
+  interface_name: eth0
+  dhcpv4:
+    gateway_ip: 10.0.0.1
+    subnet_mask: 255.255.255.0
+    range_start: 10.0.0.100
+    range_end: 10.0.0.250
+`), &snapshot)
+	if err != nil {
+		t.Fatalf("parse DHCP snapshot: %v", err)
+	}
+	if !snapshot.DHCP.Enabled || snapshot.DHCP.DHCPv4.RangeStart != "10.0.0.100" {
+		t.Fatalf("unexpected DHCP snapshot: %#v", snapshot)
+	}
+}
+
+func TestAdGuardHomeConfigAcceptedByBinary(t *testing.T) {
+	binary := os.Getenv("NABE_ADGUARD_BINARY")
+	if binary == "" {
+		t.Skip("NABE_ADGUARD_BINARY is not set")
+	}
+	config, err := adGuardHomeConfig(edgeInstallOptions{AdGuardUIBind: "127.0.0.1:3000"})
+	if err != nil {
+		t.Fatalf("config failed: %v", err)
+	}
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "AdGuardHome.yaml")
+	if err := os.WriteFile(path, []byte(config), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cmd := exec.Command(binary, "--check-config", "-c", path, "-w", tmp)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("AdGuard Home rejected generated config: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 }
 

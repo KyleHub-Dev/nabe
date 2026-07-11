@@ -22,6 +22,7 @@ import (
 
 	"codeberg.org/KyleHub/nabe/apps/cli/internal/config"
 	"golang.org/x/crypto/bcrypt"
+	"gopkg.in/yaml.v3"
 )
 
 const version = "0.0.0"
@@ -48,19 +49,21 @@ func Run(args []string, cfg config.Config) error {
 }
 
 func usage() error {
-	return errors.New("usage: nabe <version|status|install --edge (--remote <url> --token <token> | --defer-enrollment) [--adguard-ui-bind <addr:port>] [--adguard-ui-alias adguard.home] [--adguard-dhcp ...]|configure edge --remote <url> --token <token>>")
+	return errors.New("usage: nabe <version|status|install --edge (--remote <url> --token <token> | --reuse-enrollment [--remote <url>] | --defer-enrollment) [--adguard-ui-bind <addr:port>] [--adguard-ui-alias adguard.home] [--adguard-dhcp ...]|configure edge --remote <url> --token <token>>")
 }
 
 type edgeInstallOptions struct {
 	Remote                string
 	Token                 string
 	DeferEnrollment       bool
+	ReuseEnrollment       bool
 	AdGuardUIBind         string
 	AdGuardUIAlias        string
 	AdGuardUIAliasIP      string
 	AdGuardAdminUser      string
 	AdGuardAdminPassword  string
 	AdGuardDHCPEnabled    bool
+	AdGuardDHCPConfigured bool
 	AdGuardDHCPInterface  string
 	AdGuardDHCPGateway    string
 	AdGuardDHCPSubnet     string
@@ -69,11 +72,12 @@ type edgeInstallOptions struct {
 }
 
 type hostFacts struct {
-	OS           string
-	Architecture string
-	InitSystem   string
-	PackageTool  string
-	Addresses    []string
+	OS                  string
+	Architecture        string
+	InitSystem          string
+	PackageTool         string
+	Addresses           []string
+	HasIPv6DefaultRoute bool
 }
 
 func runInstall(args []string) error {
@@ -83,6 +87,7 @@ func runInstall(args []string) error {
 	remote := flags.String("remote", "", "Nabe central API URL")
 	token := flags.String("token", "", "dev edge token")
 	deferEnrollment := flags.Bool("defer-enrollment", false, "install local edge services without configuring central enrollment")
+	reuseEnrollment := flags.Bool("reuse-enrollment", false, "reuse the existing Speiche enrollment token, optionally with a new --remote URL")
 	adGuardUIBind := flags.String("adguard-ui-bind", "127.0.0.1:3000", "AdGuard Home UI/API bind address")
 	adGuardUIAlias := flags.String("adguard-ui-alias", "", "optional local DNS name for break-glass AdGuard Home UI, for example adguard.home")
 	adGuardUIAliasIP := flags.String("adguard-ui-alias-ip", "", "optional IP for --adguard-ui-alias; defaults to the first non-loopback IPv4 address")
@@ -97,6 +102,12 @@ func runInstall(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	dhcpConfigured := false
+	flags.Visit(func(value *flag.Flag) {
+		if strings.HasPrefix(value.Name, "adguard-dhcp") {
+			dhcpConfigured = true
+		}
+	})
 	if !*edge {
 		return errors.New("only edge installation is supported: pass --edge")
 	}
@@ -104,12 +115,14 @@ func runInstall(args []string) error {
 		Remote:                *remote,
 		Token:                 *token,
 		DeferEnrollment:       *deferEnrollment,
+		ReuseEnrollment:       *reuseEnrollment,
 		AdGuardUIBind:         *adGuardUIBind,
 		AdGuardUIAlias:        *adGuardUIAlias,
 		AdGuardUIAliasIP:      *adGuardUIAliasIP,
 		AdGuardAdminUser:      *adGuardAdminUser,
 		AdGuardAdminPassword:  *adGuardAdminPassword,
 		AdGuardDHCPEnabled:    *adGuardDHCP,
+		AdGuardDHCPConfigured: dhcpConfigured,
 		AdGuardDHCPInterface:  *adGuardDHCPInterface,
 		AdGuardDHCPGateway:    *adGuardDHCPGateway,
 		AdGuardDHCPSubnet:     *adGuardDHCPSubnet,
@@ -120,6 +133,18 @@ func runInstall(args []string) error {
 		return err
 	}
 	facts, err := detectHostFacts()
+	if err != nil {
+		return err
+	}
+	opts, err = preserveExistingBreakglassOptions(opts)
+	if err != nil {
+		return err
+	}
+	opts, err = preserveExistingEnrollmentOptions(opts)
+	if err != nil {
+		return err
+	}
+	opts, err = preserveExistingDHCPOptions(opts)
 	if err != nil {
 		return err
 	}
@@ -143,6 +168,7 @@ func runInstall(args []string) error {
 		fn   func(edgeInstallOptions, hostFacts) error
 	}{
 		{"install runtime dependencies", installDependencies},
+		{"install nabe cli", installNabeCLI},
 		{"create nabe directories", createNabeDirectories},
 		{"configure unbound", configureUnbound},
 		{"write adguard break-glass metadata", writeAdGuardBreakglassMetadata},
@@ -215,9 +241,21 @@ func validateEdgeOptionSyntax(opts edgeInstallOptions) error {
 	if strings.TrimSpace(opts.AdGuardUIBind) == "" {
 		opts.AdGuardUIBind = "127.0.0.1:3000"
 	}
+	if opts.DeferEnrollment && opts.ReuseEnrollment {
+		return errors.New("--defer-enrollment cannot be combined with --reuse-enrollment")
+	}
 	if opts.DeferEnrollment {
 		if strings.TrimSpace(opts.Remote) != "" || strings.TrimSpace(opts.Token) != "" {
 			return errors.New("--defer-enrollment cannot be combined with --remote or --token")
+		}
+	} else if opts.ReuseEnrollment {
+		if strings.TrimSpace(opts.Token) != "" {
+			return errors.New("--reuse-enrollment cannot be combined with --token")
+		}
+		if strings.TrimSpace(opts.Remote) != "" {
+			if err := validateRemoteURL(opts.Remote); err != nil {
+				return err
+			}
 		}
 	} else if err := validateEdgeRemote(opts.Remote, opts.Token); err != nil {
 		return err
@@ -252,11 +290,15 @@ func validateEdgeOptionSyntax(opts edgeInstallOptions) error {
 }
 
 func validateEdgeRemote(remote string, token string) error {
-	if strings.TrimSpace(remote) == "" {
-		return errors.New("--remote is required")
-	}
 	if strings.TrimSpace(token) == "" {
 		return errors.New("--token is required")
+	}
+	return validateRemoteURL(remote)
+}
+
+func validateRemoteURL(remote string) error {
+	if strings.TrimSpace(remote) == "" {
+		return errors.New("--remote is required")
 	}
 	parsed, err := url.Parse(remote)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
@@ -366,11 +408,12 @@ func isLoopbackBind(value string) bool {
 
 func detectHostFacts() (hostFacts, error) {
 	facts := hostFacts{
-		OS:           osReleaseName(),
-		Architecture: runtime.GOARCH,
-		InitSystem:   "unknown",
-		PackageTool:  "unknown",
-		Addresses:    localAddresses(),
+		OS:                  osReleaseName(),
+		Architecture:        runtime.GOARCH,
+		InitSystem:          "unknown",
+		PackageTool:         "unknown",
+		Addresses:           localAddresses(),
+		HasIPv6DefaultRoute: hasIPv6DefaultRoute(),
 	}
 	if _, err := exec.LookPath("systemctl"); err == nil {
 		facts.InitSystem = "systemd"
@@ -381,12 +424,34 @@ func detectHostFacts() (hostFacts, error) {
 	return facts, nil
 }
 
+func hasIPv6DefaultRoute() bool {
+	out, err := exec.Command("ip", "-6", "route", "show", "default").Output()
+	return err == nil && strings.TrimSpace(string(out)) != ""
+}
+
 func installDependencies(edgeInstallOptions, hostFacts) error {
 	if err := run("sudo", "apt-get", "update"); err != nil {
 		return err
 	}
 	return run("sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
-		"ca-certificates", "curl", "dnsutils", "golang-go", "tar", "gzip", "unbound")
+		"ca-certificates", "curl", "dnsutils", "golang-go", "tar", "gzip", "unbound", "unbound-anchor")
+}
+
+func installNabeCLI(edgeInstallOptions, hostFacts) error {
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	executable, err = filepath.EvalSymlinks(executable)
+	if err != nil {
+		return err
+	}
+	target := "/usr/local/bin/nabe"
+	targetResolved, err := filepath.EvalSymlinks(target)
+	if err == nil && targetResolved == executable {
+		return nil
+	}
+	return run("sudo", "install", "-m", "0755", executable, target)
 }
 
 func createNabeDirectories(edgeInstallOptions, hostFacts) error {
@@ -437,9 +502,113 @@ ADGUARD_ADMIN_PASSWORD=%s
 	return nil
 }
 
-func configureUnbound(edgeInstallOptions, hostFacts) error {
-	const config = unboundConfig
+func preserveExistingBreakglassOptions(opts edgeInstallOptions) (edgeInstallOptions, error) {
+	if strings.TrimSpace(opts.AdGuardUIAlias) == "" {
+		return opts, nil
+	}
+	out, err := exec.Command("sudo", "cat", "/etc/nabe/adguard-ui.env").CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "No such file or directory") {
+			return opts, nil
+		}
+		return opts, fmt.Errorf("read existing AdGuard break-glass metadata: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	values := parseGeneratedEnv(string(out))
+	if values["ADGUARD_UI_ALIAS"] != strings.TrimSpace(opts.AdGuardUIAlias) {
+		return opts, nil
+	}
+	if strings.TrimSpace(opts.AdGuardAdminUser) == "" {
+		opts.AdGuardAdminUser = values["ADGUARD_ADMIN_USER"]
+	}
+	if strings.TrimSpace(opts.AdGuardAdminPassword) == "" {
+		opts.AdGuardAdminPassword = values["ADGUARD_ADMIN_PASSWORD"]
+	}
+	return opts, nil
+}
+
+func preserveExistingEnrollmentOptions(opts edgeInstallOptions) (edgeInstallOptions, error) {
+	if !opts.ReuseEnrollment {
+		return opts, nil
+	}
+	out, err := exec.Command("sudo", "cat", "/etc/nabe/speiche.env").CombinedOutput()
+	if err != nil {
+		return opts, fmt.Errorf("read existing Speiche enrollment: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	values := parseGeneratedEnv(string(out))
+	if strings.TrimSpace(opts.Remote) == "" {
+		opts.Remote = values["NABE_API_URL"]
+	}
+	opts.Token = values["SPEICHE_ENROLLMENT_TOKEN"]
+	if err := validateEdgeRemote(opts.Remote, opts.Token); err != nil {
+		return opts, fmt.Errorf("existing Speiche enrollment is incomplete: %w", err)
+	}
+	opts.ReuseEnrollment = false
+	return opts, nil
+}
+
+type adGuardConfigSnapshot struct {
+	DHCP struct {
+		Enabled       bool   `yaml:"enabled"`
+		InterfaceName string `yaml:"interface_name"`
+		DHCPv4        struct {
+			GatewayIP  string `yaml:"gateway_ip"`
+			SubnetMask string `yaml:"subnet_mask"`
+			RangeStart string `yaml:"range_start"`
+			RangeEnd   string `yaml:"range_end"`
+		} `yaml:"dhcpv4"`
+	} `yaml:"dhcp"`
+}
+
+func preserveExistingDHCPOptions(opts edgeInstallOptions) (edgeInstallOptions, error) {
+	if opts.AdGuardDHCPConfigured {
+		return opts, nil
+	}
+	out, err := exec.Command("sudo", "cat", "/opt/AdGuardHome/AdGuardHome.yaml").CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "No such file or directory") {
+			return opts, nil
+		}
+		return opts, fmt.Errorf("read existing AdGuard Home configuration: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	var snapshot adGuardConfigSnapshot
+	if err := yaml.Unmarshal(out, &snapshot); err != nil {
+		return opts, fmt.Errorf("parse existing AdGuard Home configuration: %w", err)
+	}
+	if !snapshot.DHCP.Enabled {
+		return opts, nil
+	}
+	opts.AdGuardDHCPEnabled = true
+	opts.AdGuardDHCPInterface = snapshot.DHCP.InterfaceName
+	opts.AdGuardDHCPGateway = snapshot.DHCP.DHCPv4.GatewayIP
+	opts.AdGuardDHCPSubnet = snapshot.DHCP.DHCPv4.SubnetMask
+	opts.AdGuardDHCPRangeStart = snapshot.DHCP.DHCPv4.RangeStart
+	opts.AdGuardDHCPRangeEnd = snapshot.DHCP.DHCPv4.RangeEnd
+	return opts, nil
+}
+
+func parseGeneratedEnv(content string) map[string]string {
+	values := make(map[string]string)
+	for _, line := range strings.Split(content, "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+			value = strings.TrimSuffix(strings.TrimPrefix(value, "'"), "'")
+			value = strings.ReplaceAll(value, `'"'"'`, `'`)
+		}
+		values[strings.TrimSpace(key)] = value
+	}
+	return values
+}
+
+func configureUnbound(_ edgeInstallOptions, facts hostFacts) error {
+	config := unboundConfig(facts.HasIPv6DefaultRoute)
 	if err := writeRootFile("/etc/unbound/unbound.conf.d/nabe-edge.conf", config, "0644"); err != nil {
+		return err
+	}
+	if err := run("sudo", "/usr/sbin/unbound-checkconf", "/etc/unbound/unbound.conf"); err != nil {
 		return err
 	}
 	if err := run("sudo", "systemctl", "enable", "unbound"); err != nil {
@@ -448,59 +617,145 @@ func configureUnbound(edgeInstallOptions, hostFacts) error {
 	return run("sudo", "systemctl", "restart", "unbound")
 }
 
-const unboundConfig = `server:
+func unboundConfig(hasIPv6DefaultRoute bool) string {
+	doIPv6 := "no"
+	if hasIPv6DefaultRoute {
+		doIPv6 = "yes"
+	}
+	return fmt.Sprintf(`server:
   interface: 127.0.0.1
   port: 5335
   access-control: 127.0.0.0/8 allow
   do-ip4: yes
-  do-ip6: yes
+  do-ip6: %s
   do-udp: yes
   do-tcp: yes
+
   hide-identity: yes
   hide-version: yes
   qname-minimisation: yes
-`
+  module-config: "validator iterator"
+  harden-dnssec-stripped: yes
+  edns-buffer-size: 1232
+  max-udp-size: 1232
+
+  msg-cache-size: 16m
+  rrset-cache-size: 32m
+  key-cache-size: 8m
+  prefetch: yes
+  prefetch-key: yes
+
+  serve-expired: yes
+  serve-expired-ttl: 86400
+  serve-expired-reply-ttl: 30
+  serve-expired-client-timeout: 1800
+
+  val-permissive-mode: no
+  val-bogus-ttl: 60
+  log-servfail: yes
+  val-log-level: 1
+`, doIPv6)
+}
 
 func installAdGuardHome(opts edgeInstallOptions, facts hostFacts) error {
-	if _, err := os.Stat("/opt/AdGuardHome/AdGuardHome"); os.IsNotExist(err) {
-		tmp, err := os.MkdirTemp("", "nabe-adguard-*")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(tmp)
-		arch := "arm64"
-		if runtime.GOARCH == "amd64" {
-			arch = "amd64"
-		}
-		archive := filepath.Join(tmp, "adguardhome.tar.gz")
-		url := "https://static.adtidy.org/adguardhome/release/AdGuardHome_linux_" + arch + ".tar.gz"
-		if err := download(url, archive); err != nil {
-			return err
-		}
-		if err := untarGz(archive, tmp); err != nil {
-			return err
-		}
-		if err := run("sudo", "rm", "-rf", "/opt/AdGuardHome"); err != nil {
-			return err
-		}
-		if err := run("sudo", "mv", filepath.Join(tmp, "AdGuardHome"), "/opt/AdGuardHome"); err != nil {
-			return err
-		}
-		if err := run("sudo", "/opt/AdGuardHome/AdGuardHome", "-s", "install"); err != nil {
-			return err
-		}
+	tmp, err := os.MkdirTemp("", "nabe-adguard-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	arch := "arm64"
+	if runtime.GOARCH == "amd64" {
+		arch = "amd64"
+	}
+	archive := filepath.Join(tmp, "adguardhome.tar.gz")
+	url := "https://static.adtidy.org/adguardhome/release/AdGuardHome_linux_" + arch + ".tar.gz"
+	if err := download(url, archive); err != nil {
+		return err
+	}
+	if err := untarGz(archive, tmp); err != nil {
+		return err
 	}
 	config, err := adGuardHomeConfig(opts)
 	if err != nil {
 		return err
 	}
+	configPath := filepath.Join(tmp, "AdGuardHome.yaml")
+	if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+		return err
+	}
+	checkWorkDir := filepath.Join(tmp, "data")
+	if err := os.MkdirAll(checkWorkDir, 0755); err != nil {
+		return err
+	}
+	check := exec.Command(filepath.Join(tmp, "AdGuardHome", "AdGuardHome"), "--check-config", "-c", configPath, "-w", checkWorkDir)
+	check.Stdout = os.Stdout
+	check.Stderr = os.Stderr
+	if err := check.Run(); err != nil {
+		return fmt.Errorf("generated AdGuard Home configuration is invalid: %w", err)
+	}
+	if err := run("sudo", "systemctl", "stop", "AdGuardHome"); err != nil && !isUnitMissing("AdGuardHome") {
+		return err
+	}
+	if err := run("sudo", "install", "-d", "-m", "0755", "/opt/AdGuardHome"); err != nil {
+		return err
+	}
+	if err := run("sudo", "install", "-d", "-m", "0700", "/opt/AdGuardHome/data"); err != nil {
+		return err
+	}
+	for _, name := range []string{"AdGuardHome", "AdGuardHome.sig", "CHANGELOG.md", "LICENSE.txt", "README.md"} {
+		mode := "0644"
+		if name == "AdGuardHome" {
+			mode = "0755"
+		}
+		if err := run("sudo", "install", "-m", mode, filepath.Join(tmp, "AdGuardHome", name), filepath.Join("/opt/AdGuardHome", name)); err != nil {
+			return err
+		}
+	}
+	if err := backupRootFile("/opt/AdGuardHome/AdGuardHome.yaml", "/etc/nabe/adguardhome.previous.yaml"); err != nil {
+		return err
+	}
 	if err := writeRootFile("/opt/AdGuardHome/AdGuardHome.yaml", config, "0600"); err != nil {
+		return err
+	}
+	if err := writeAdGuardHomeUnit(); err != nil {
+		return err
+	}
+	if err := run("sudo", "/opt/AdGuardHome/AdGuardHome", "--check-config", "-c", "/opt/AdGuardHome/AdGuardHome.yaml", "-w", "/opt/AdGuardHome"); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "daemon-reload"); err != nil {
 		return err
 	}
 	if err := run("sudo", "systemctl", "enable", "AdGuardHome"); err != nil {
 		return err
 	}
 	return run("sudo", "systemctl", "restart", "AdGuardHome")
+}
+
+func isUnitMissing(name string) bool {
+	err := exec.Command("systemctl", "cat", name).Run()
+	return err != nil
+}
+
+func writeAdGuardHomeUnit() error {
+	unit := `[Unit]
+Description=AdGuard Home DNS engine managed by Nabe
+After=network-online.target unbound.service
+Wants=network-online.target unbound.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/AdGuardHome
+ExecStart=/opt/AdGuardHome/AdGuardHome --no-check-update -c /opt/AdGuardHome/AdGuardHome.yaml -w /opt/AdGuardHome
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+`
+	return writeRootFile("/etc/systemd/system/AdGuardHome.service", unit, "0644")
 }
 
 func adGuardHomeConfig(opts edgeInstallOptions) (string, error) {
@@ -532,18 +787,45 @@ dns:
   port: 53
   upstream_dns:
     - 127.0.0.1:5335
-  bootstrap_dns:
-    - 127.0.0.1:5335
+  fallback_dns:
+    - https://1.1.1.1/dns-query
+  bootstrap_dns: []
+  upstream_mode: load_balance
+  upstream_timeout: 5s
+  enable_dnssec: true
   protection_enabled: true
   filtering_enabled: true
   blocking_mode: default
-  ratelimit: 0
+  ratelimit: 100
+  refuse_any: true
   cache_size: 4194304
-filters: []
+  cache_optimistic: true
+  cache_optimistic_answer_ttl: 30s
+  cache_optimistic_max_age: 12h
+  allowed_clients:
+    - 127.0.0.0/8
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+  pending_requests:
+    enabled: true
+filters:
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+    name: AdGuard DNS filter
+    id: 1
+querylog:
+  enabled: true
+  file_enabled: true
+  interval: 168h
+  size_memory: 1000
+statistics:
+  enabled: true
+  interval: 720h
 user_rules:
 %s
 %s
-schema_version: 29
+schema_version: 34
 `, opts.AdGuardUIBind, users, userRules, dhcp), nil
 }
 
@@ -627,6 +909,9 @@ func configureSpeiche(opts edgeInstallOptions, facts hostFacts) error {
 		if err := run("sudo", "systemctl", "daemon-reload"); err != nil {
 			return err
 		}
+		if err := run("sudo", "systemctl", "disable", "--now", "speiche"); err != nil && !isUnitMissing("speiche") {
+			return err
+		}
 		fmt.Println("Speiche enrollment deferred; run nabe configure edge --remote <url> --token <token> to start it")
 		return nil
 	}
@@ -685,8 +970,6 @@ func runHealthChecks(opts edgeInstallOptions, facts hostFacts) error {
 	checks := [][]string{
 		{"systemctl", "is-active", "unbound"},
 		{"systemctl", "is-active", "AdGuardHome"},
-		{"dig", "+time=3", "+tries=1", "@127.0.0.1", "-p", "5335", "example.com"},
-		{"dig", "+time=3", "+tries=1", "@127.0.0.1", "example.com"},
 	}
 	if !opts.DeferEnrollment {
 		checks = append(checks, []string{"systemctl", "is-active", "speiche"})
@@ -696,12 +979,30 @@ func runHealthChecks(opts edgeInstallOptions, facts hostFacts) error {
 			return err
 		}
 	}
+	if err := checkDNSAnswer("127.0.0.1", "5335", "example.com"); err != nil {
+		return fmt.Errorf("Unbound resolution check failed: %w", err)
+	}
+	if err := checkDNSAnswer("127.0.0.1", "53", "example.com"); err != nil {
+		return fmt.Errorf("AdGuard Home resolution check failed: %w", err)
+	}
 	out, err := exec.Command("dig", "+short", "+time=3", "+tries=1", "@127.0.0.1", "blocked.nabe.test", "A").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("blocked-domain query failed: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	if !strings.Contains(string(out), "0.0.0.0") {
 		return fmt.Errorf("blocked-domain query was not blocked; got %q", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func checkDNSAnswer(server string, port string, name string) error {
+	out, err := exec.Command("dig", "+time=5", "+tries=1", "@"+server, "-p", port, name, "A").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("dig failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	response := string(out)
+	if !strings.Contains(response, "status: NOERROR") || strings.Contains(response, "ANSWER: 0") {
+		return fmt.Errorf("unexpected DNS response: %s", strings.TrimSpace(response))
 	}
 	return nil
 }
@@ -732,6 +1033,13 @@ func writeRootFile(path string, content string, mode string) error {
 		return err
 	}
 	return nil
+}
+
+func backupRootFile(source string, target string) error {
+	if err := exec.Command("sudo", "test", "-f", source).Run(); err != nil {
+		return nil
+	}
+	return run("sudo", "install", "-m", "0600", source, target)
 }
 
 func download(sourceURL string, path string) error {

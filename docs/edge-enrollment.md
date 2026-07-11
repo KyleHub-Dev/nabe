@@ -70,7 +70,8 @@ Optional Newt/Pangolin routes may later provide private break-glass access to na
 Deferred central enrollment:
 
 - `nabe install --edge --defer-enrollment` installs the local edge stack
-  without writing `/etc/nabe/speiche.env` or starting Speiche.
+  without writing `/etc/nabe/speiche.env` or starting Speiche. On an existing
+  edge, it also stops and disables Speiche so a stale central URL is not used.
 - Use this when the Pi should be prepared before the central API URL or
   enrollment token is final.
 - Later, run:
@@ -81,3 +82,13 @@ nabe configure edge --remote "http://10.0.0.230:8080" --token "<edge-token>"
 
 That writes `/etc/nabe/speiche.env`, enables Speiche, and restarts it so the
 edge can enroll.
+
+Reusing an existing enrollment during upgrades:
+
+- `nabe install --edge --reuse-enrollment` re-runs the edge install while
+  keeping the enrollment token already stored in the root-owned
+  `/etc/nabe/speiche.env`.
+- Add `--remote <url>` to point the existing enrollment at a new central API
+  URL without re-entering the token.
+- `--reuse-enrollment` cannot be combined with `--token` or
+  `--defer-enrollment`.

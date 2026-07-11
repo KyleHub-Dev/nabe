@@ -82,6 +82,29 @@ running the local DNS stack:
 - Speiche as the outbound edge agent that enrolls with the Nabe API and sends
   heartbeats.
 
+The generated resolver defaults keep DNSSEC validation strict. Unbound serves
+recently expired validated cache entries during transient upstream failures,
+prefetches active records, and only enables IPv6 recursion when the host has an
+IPv6 default route. AdGuard Home uses Unbound as its sole primary resolver and
+an encrypted Cloudflare resolver only when Unbound does not respond within five
+seconds. DNS service is restricted to loopback and private IPv4 networks.
+The standard AdGuard DNS filter is enabled, raw query logs stay local with a
+seven-day rotation interval, and aggregate statistics retain 30 days.
+
+Running `nabe install --edge` again is an in-place upgrade. It refreshes
+Unbound, AdGuard Home, Speiche, and Nabe-managed configuration while preserving
+the Speiche identity, AdGuard data directory, and existing generated
+break-glass credentials for the same alias.
+
+Use `--reuse-enrollment` during an upgrade to retain the root-owned Speiche
+token. An optional `--remote` updates only the central API URL:
+
+```sh
+nabe install --edge --reuse-enrollment \
+  --remote "http://nabe-central.local:8080" \
+  --adguard-ui-alias adguard.home
+```
+
 The central Nabe API must be reachable from the edge device. For the current
 LAN setup, use:
 
