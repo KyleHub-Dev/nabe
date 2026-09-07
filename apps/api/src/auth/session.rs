@@ -36,7 +36,7 @@ pub fn read_principal(headers: &HeaderMap, secret: &str) -> Result<Principal, Ap
         return Err(ApiError::Unauthorized);
     }
 
-    Ok(Principal::admin(
+    Ok(Principal::identity(
         claims.provider,
         claims.subject,
         claims.email,
@@ -164,7 +164,7 @@ mod tests {
 
         let parsed = read_principal(&headers, "test-secret").expect("principal");
         assert_eq!(parsed.subject, "sub-1");
-        assert_eq!(parsed.roles, vec!["admin"]);
+        assert!(parsed.roles.is_empty());
     }
 
     #[test]

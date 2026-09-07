@@ -52,7 +52,8 @@ Enable the Newt service only when credentials are configured:
 podman compose -f compose.dev.yaml --profile edge up -d --build
 ```
 
-Speiche deployment is intentionally out of scope for MVP 0. Speiche is expected to be installed later through Nabe CLI/control tooling that can install or manage an edge Compose stack.
+Speiche runs separately from this central Compose stack. The Nabe CLI installs
+and configures edge services; see [edge-enrollment.md](edge-enrollment.md).
 
 ## What To Build First
 

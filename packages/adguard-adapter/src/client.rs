@@ -87,6 +87,18 @@ impl AdguardAdapter {
         self.get_json(path).await
     }
 
+    pub async fn raw_get_with_query(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+    ) -> Result<serde_json::Value, AdguardAdapterError> {
+        let mut url = self.control_url(path)?;
+        url.query_pairs_mut()
+            .extend_pairs(query.iter().map(|(key, value)| (*key, value.as_str())));
+        self.request_url::<serde_json::Value>(url, reqwest::Method::GET, None)
+            .await
+    }
+
     pub async fn raw_json<B: Serialize + ?Sized>(
         &self,
         operation: Operation,
@@ -121,12 +133,20 @@ impl AdguardAdapter {
         method: reqwest::Method,
         body: Option<&B>,
     ) -> Result<serde_json::Value, AdguardAdapterError> {
+        let url = self.control_url(path)?;
+        self.request_url(url, method, body).await
+    }
+
+    async fn request_url<B: Serialize + ?Sized>(
+        &self,
+        url: Url,
+        method: reqwest::Method,
+        body: Option<&B>,
+    ) -> Result<serde_json::Value, AdguardAdapterError> {
         let credentials = self
             .credentials
             .as_ref()
             .ok_or(AdguardAdapterError::NotConfigured)?;
-
-        let url = self.control_url(path)?;
         let mut request = self.http.request(method, url);
         if let Some(body) = body {
             request = request.json(body);

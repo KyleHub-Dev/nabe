@@ -1,24 +1,38 @@
 # Nabe
 
-Nabe is a self-hosted DNS control plane by KyleHub.
+Nabe is a self-hosted dashboard for household DNS appliances. The first target is
+one Raspberry Pi per home, with guided setup and filtering managed through Nabe.
+AdGuard Home and Unbound provide local DNS; Speiche connects the appliance to
+central without inbound router ports.
 
-Nabe is not a DNS resolver. It is the central hub for managing encrypted DNS clients, DNS engine instances, policies, ownership, auditability, and future edge nodes across personal, family, homelab, and small trusted networks.
+The next milestone covers three households: Kyle's apartment, his parents' home
+and a friend's family home. They install Pi OS, connect Ethernet and run the
+Nabe installer before completing browser setup.
+Read the [product scope](docs/product.md) and [pilot roadmap](docs/roadmap.md).
+The browser wizard and local recovery page are planned, not shipped.
 
-Current status: early bootstrap. This repository contains the first monorepo structure, documentation, runnable placeholders, deployment skeletons, and license boundaries. It is not production-ready.
+Current status: under development, not production-ready. This checkout includes
+control-plane APIs, device/policy management and edge installation. The household
+wizard, remote policy application and recovery experience remain
+planned work; these docs describe the development source, not a released version.
 
 ## Product Model
 
 - Nabe Console: the primary web UI for users and admins.
 - Nabe API: the backend that owns users, Device Clients, permissions, Client Tokens, audit logs, and DNS Engine access.
 - DNS Engine: resolver backend managed through adapters. AdGuard Home is the first engine.
-- Speiche Agent: a generic edge connector for future Edge Nodes.
-- Cloud DNS: the initial single AdGuard Home backed master instance.
+- Speiche Agent: the outbound connection from a household appliance to Nabe.
+- Household appliance: one Edge Node running AdGuard Home and Unbound.
+- Cloud DNS: an existing development configuration, outside the household pilot.
 
 AdGuard Home is consumed through its API by the Nabe backend. Native AdGuard UI is break-glass/debug only and should not be publicly routed by default.
 
 ## Architecture Summary
 
-The MVP 0 target is a single admin login through Zitadel, a Rust Nabe API with Turso Database persistence, and live status for one Cloud DNS master backed by AdGuard Home and Unbound.
+The central API supports generic OIDC authentication, Nabe-owned global and
+tenant authorization in Turso, durable control-plane audit events, and live
+status for one Cloud DNS master backed by AdGuard Home and Unbound. Zitadel is
+the documented first OIDC provider.
 
 The browser must never receive AdGuard admin credentials. DNS logs and stats must be filtered server-side by owned client IDs. Cloud DNS should only allow tokenized clients through AdGuard Allowed Clients / ClientIDs.
 
@@ -50,25 +64,27 @@ cp .env.example .env
 podman compose -f compose.dev.yaml up -d --build
 ```
 
-The current services are placeholders:
+The current components are:
 
 - Web: SvelteKit Nabe Console stub with German default UI, English language option, and system/light/dark theme support.
 - API: Rust Axum service with Turso persistence, Zitadel OIDC callback, and AdGuard Engine status endpoints.
 - Worker: TypeScript startup stub, not part of MVP 0 Compose deployment.
-- Speiche: Go agent stub with outbound-only behavior by default.
-- CLI: Go command stub for future admin/operator workflows.
+- Speiche: outbound Go edge agent with enrollment, heartbeats and an AdGuard driver.
+- CLI: Go tool for edge installation, upgrades and configuration.
 
-## Git Remotes
+## Git hosting
 
-Codeberg is the primary Git host. GitHub is a reach/community mirror.
+[GitHub](https://github.com/KyleHub-Dev/nabe) is the canonical repository.
+`origin` fetches and pushes there. For existing checkouts, see the
+[remote setup instructions](docs/git-hosting.md).
 
-`origin` fetches from Codeberg and pushes `main` to both Codeberg and GitHub through multiple push URLs. The `github` remote is a convenience remote.
-
-See [docs/git-remotes-and-mirroring.md](docs/git-remotes-and-mirroring.md).
+Anonymous CLI and Speiche downloads require public repository access. While the
+repository is private, use an authorized checkout and the build instructions in
+[apps/cli/README.md](apps/cli/README.md).
 
 ## MVP Development Stack
 
-The first real Nabe version is developed against a self-contained Compose stack with Nabe, Turso Database persistence inside the Rust API, AdGuard Home, Unbound, and optional Newt. See [docs/mvp-0.md](docs/mvp-0.md), [docs/mvp-deployment.md](docs/mvp-deployment.md), and [compose.dev.yaml](compose.dev.yaml).
+The central development environment is a self-contained Compose stack with Nabe, Turso persistence inside the Rust API, AdGuard Home, Unbound, and optional Newt. Its central DNS engine is a development target; the household pilot requires policy application to a separate appliance. See [docs/mvp-0.md](docs/mvp-0.md), [docs/mvp-deployment.md](docs/mvp-deployment.md), and [compose.dev.yaml](compose.dev.yaml).
 
 Zitadel setup is documented in [docs/zitadel.md](docs/zitadel.md). The Nabe authorization model is documented in [docs/authorization.md](docs/authorization.md).
 
@@ -109,13 +125,13 @@ The central Nabe API must be reachable from the edge device. For the current
 LAN setup, use:
 
 ```sh
-CENTRAL_API="http://10.0.0.230:8080"
+CENTRAL_API="http://nabe-central.local:8080"
 ```
 
 Install the Nabe CLI on the edge:
 
 ```sh
-curl -fsSL https://codeberg.org/KyleHub/nabe/raw/branch/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KyleHub-Dev/nabe/main/install.sh | bash
 nabe version
 ```
 

@@ -1,4 +1,9 @@
-# Goal: Everything Working
+# Historical workstation integration goal
+
+This is an earlier, broader agent task. The next milestone is the
+[household pilot](roadmap.md), with scope in [product.md](product.md). Use this
+file only when explicitly revisiting the workstation integration; its historical
+topology and requirements do not define the household release.
 
 This file is written for long-running coding-agent goal modes such as Codex
 `/goal` and Claude Code `/goal`.
@@ -374,7 +379,7 @@ Pi bootstrap checks:
 
 ```sh
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'curl -fsSL http://<current-workstation-lan-ip>:8080/health'
-ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'curl -fsSL https://codeberg.org/KyleHub/nabe/raw/branch/main/install.sh | bash'
+ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'curl -fsSL https://raw.githubusercontent.com/KyleHub-Dev/nabe/main/install.sh | bash'
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe version'
 ssh "$NABE_EDGE_SSH_USER@$NABE_EDGE_SSH_HOST" 'nabe install --edge --remote "http://<current-workstation-lan-ip>:8080" --token "<dev-token>" --adguard-ui-alias adguard.home'
 # Or prepare first, then enroll later:

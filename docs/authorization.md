@@ -6,9 +6,11 @@ Canonical authorization decisions now live in
 `docs/adr/0003-authorization-permission-model.md`. If this document conflicts
 with that ADR, the ADR supersedes it.
 
-Nabe uses Zitadel for authentication and Nabe-owned authorization data for product permissions.
-
-For MVP 0 the backend still treats a successful Zitadel login as an admin session so the first local stack remains easy to operate. The database schema is prepared for the next step: multi-tenant authorization with global permissions, tenant roles, and subject memberships.
+Nabe uses any standards-compliant OIDC provider, including Zitadel, for
+authentication and Nabe-owned authorization data for product permissions.
+Successful login proves identity only. Every protected request resolves current
+global roles, tenant memberships, and permissions from the embedded database.
+No role or permission is trusted from the browser session cookie.
 
 ## Concepts
 
@@ -108,7 +110,18 @@ Example for the Gray family:
 | `user` | Tenant User | Tenant |
 | `viewer` | Tenant Viewer | Tenant |
 
-For MVP 0, the existing backend session still returns the `admin` role after login. The multi-tenant schema exists so the next implementation step can move enforcement from this MVP shortcut to database-backed permission checks.
+Fresh identities receive only the native `baseline` global role. Initial
+operators must be explicitly listed as `<issuer-host>:<OIDC-subject>` in
+`NABE_BOOTSTRAP_ADMIN_SUBJECTS`; after their verified login Nabe grants the
+native `admin` role. Existing pre-native installations are migrated by
+preserving subjects that were already stored as admins.
+
+Platform admins can create tenants with `POST /api/tenants`. Nabe creates the
+manager, user, and viewer roles and copies their permission templates into the
+new tenant. Platform admins and members with `tenant.manage` can grant an
+existing OIDC subject a tenant role through
+`POST /api/tenants/{tenantId}/members`. `GET /api/tenants` returns every tenant
+to platform admins and only assigned tenants to other users.
 
 ## Post-MVP Zitadel Automation
 

@@ -67,31 +67,42 @@ OIDC_POST_LOGOUT_REDIRECT_URI=http://localhost:5173/
 In the application token settings:
 
 - Set AuthTokenType to `JWT`.
-- Enable adding user roles to the access token.
-- Enable user roles inside the ID token.
 - Enable profile information inside the ID token.
 
-The project setting for returning user roles during authentication must also remain enabled.
+Zitadel roles are not trusted as Nabe product permissions. They may still be
+enabled for other applications in the Zitadel project, but Nabe uses the
+verified issuer and subject only and resolves authorization from its database.
 
 ## Nabe Role Mapping
 
-MVP 0 maps every successful Zitadel login to the Nabe `admin` role in the backend session. This is a temporary MVP shortcut so the first stack is easy to operate.
-
-The target model is documented in [authorization.md](authorization.md): Zitadel controls who can authenticate, while Nabe stores product authorization through global roles, tenant groups, tenant roles, memberships, and permissions.
+Zitadel controls who can authenticate, while Nabe stores product authorization
+through global roles, tenant roles, memberships, and permissions. Session
+cookies store identity but no authority; current grants are loaded for every
+protected request.
 
 `baseline` is not a Zitadel project role. It is Nabe's implicit status for a signed-in user who has no tenant membership yet.
 
 For tenant access, use a separate tenant group key such as `tenant_gray` and combine it with a tenant role such as `manager`, `user`, or `viewer`.
 
-Nabe stores only a local subject cache:
+Nabe stores a local subject cache:
 
 - provider
 - subject
 - optional email
 - optional display name
-- role
 - first seen timestamp
 - last seen timestamp
+
+To bootstrap the initial operator, obtain the user's Zitadel `sub` claim and
+configure the exact issuer-host and subject pair:
+
+```env
+NABE_BOOTSTRAP_ADMIN_SUBJECTS=auth.kylehub.dev:<subject>
+```
+
+Multiple operators are comma-separated. This setting contains identifiers, not
+credentials, but should still be managed as deployment configuration. Once a
+verified login matches, Nabe idempotently grants its native `admin` role.
 
 ## Required Nabe Environment
 
@@ -101,6 +112,7 @@ OIDC_CLIENT_ID=372369717538586629
 OIDC_REDIRECT_URI=http://localhost:8080/auth/callback
 OIDC_POST_LOGOUT_REDIRECT_URI=http://localhost:5173/
 SESSION_SECRET=change-this-to-a-local-random-secret
+NABE_BOOTSTRAP_ADMIN_SUBJECTS=auth.kylehub.dev:<subject>
 ```
 
 Use a unique local `SESSION_SECRET`. Do not commit filled `.env` files or real secrets.

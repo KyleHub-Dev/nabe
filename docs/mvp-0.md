@@ -1,4 +1,10 @@
-# MVP 0
+# Original MVP 0 scope
+
+Historical planning record. This is not the current authorization or edge-install
+procedure. Read [authorization.md](authorization.md) for native permissions and
+[edge-enrollment.md](edge-enrollment.md) for edge setup. In particular, the
+original all-users-as-admin assumption below does not describe the current
+working implementation.
 
 MVP 0 is the first running Nabe version for a self-contained Cloud DNS master stack.
 

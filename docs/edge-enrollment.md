@@ -1,13 +1,30 @@
 # Edge Enrollment
 
-Planned flow:
+Enrollment flow:
 
 1. Admin creates an Edge Node in Nabe.
-2. Nabe issues an enrollment token.
-3. Edge host runs Speiche with the token.
-4. Speiche connects outbound to Nabe API.
-5. Nabe validates the token and marks the node online.
-6. Speiche sends heartbeats, inventory, and job results.
+2. The edge host runs Speiche with the explicitly dev-only bootstrap token.
+3. Speiche connects outbound to `POST /api/edge/enroll`.
+4. Nabe validates the bootstrap token and issues a random 256-bit credential
+   bound to that node ID. The plaintext credential is returned once; central
+   stores only its SHA-256 digest.
+5. Speiche stores the credential in its root-only identity file and uses it for
+   heartbeats and statistic batches. The bootstrap token is not accepted by
+   those endpoints.
+6. Nabe rejects another enrollment for the same node while its credential is
+   active, preventing silent credential replacement.
+
+An administrator can request controlled re-enrollment with
+`POST /api/edge/nodes/{nodeId}/reenroll`. This revokes the current credential
+and creates a durable audit event. When the next heartbeat receives a forbidden
+response, Speiche preserves its stable node ID and pending telemetry, clears
+the rejected credential, and uses the configured bootstrap token to enroll on
+the following cycle.
+
+`NABE_DEV_EDGE_TOKEN` remains a local-development bootstrap mechanism, not a
+production enrollment-token lifecycle. It is accepted only by the enrollment
+endpoint. Do not expose it publicly or reuse the development value in a real
+deployment.
 
 Current heartbeat defaults:
 
@@ -21,8 +38,8 @@ Current heartbeat defaults:
   `offline` after 10.
 
 The heartbeat report is for current node state: identity, host inventory, and
-local health. Logs, DNS query data, and richer stats should use separate
-endpoints or jobs so regular heartbeats stay small and predictable.
+local health. Privacy-preserving statistic buckets use the separate
+`/api/edge/stats` endpoint so regular heartbeats stay small and predictable.
 
 Edge AdGuard UI defaults:
 
@@ -51,19 +68,25 @@ Edge DHCP defaults:
 
 Router cutover for a home LAN:
 
-1. Keep the router DHCP server enabled.
-2. Run the edge installer with `--adguard-dhcp` and a non-overlapping range.
-3. Open the AdGuard UI and verify DHCP settings are present but do not switch
-   clients yet if the router is still serving the same range.
-4. Disable DHCP on the router.
-5. Restart WiFi on one client or renew its lease.
-6. Confirm the client receives DNS server `10.0.0.10` directly.
-7. Confirm AdGuard query log shows the real client IP instead of only the
-   router IP.
+Prefer keeping router DHCP and advertising the appliance as DNS when the router
+supports that setup. For AdGuard DHCP, the installer enables DHCP when passed
+`--adguard-dhcp`; it does not stage a disabled configuration for later review.
 
-Do not run two DHCP servers on the same LAN range. During migration, use a
-small test range or switch router DHCP off immediately after enabling AdGuard
-DHCP.
+1. Record existing DHCP settings, reservations and a rollback procedure. Configure
+   a stable Pi address outside the dynamic range or exclude it explicitly.
+2. Check the interface, gateway, subnet and proposed lease range before running
+   the DHCP-enabled installer. Account for IPv6 DNS advertisement separately.
+3. Disable the previous DHCP server, then run the installer with the verified
+   `--adguard-dhcp` settings. Use the Pi's stable address for continued access.
+4. Renew one test client's lease. Verify its address, gateway, DNS server and
+   actual DNS resolution and filtering before renewing the remaining clients.
+5. If validation fails, disable AdGuard DHCP before restoring the previous DHCP
+   server and settings. Renew the test client's lease and verify recovery.
+
+Do not run independent DHCP servers on the same LAN as an improvised failover
+pair. Different lease ranges do not coordinate DNS options, reservations or
+lease ownership. If the router forwards all DNS requests itself, AdGuard may see
+only the router address; do not claim per-device attribution in that setup.
 
 Optional Newt/Pangolin routes may later provide private break-glass access to native edge UIs. They are not the main control plane.
 
@@ -77,7 +100,7 @@ Deferred central enrollment:
 - Later, run:
 
 ```sh
-nabe configure edge --remote "http://10.0.0.230:8080" --token "<edge-token>"
+nabe configure edge --remote "http://nabe-central.local:8080" --token "<edge-token>"
 ```
 
 That writes `/etc/nabe/speiche.env`, enables Speiche, and restarts it so the

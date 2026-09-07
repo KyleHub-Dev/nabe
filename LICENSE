@@ -1,11 +1,20 @@
-This repository uses mixed licensing by package/component.
+This repository uses mixed licensing by component.
 
-Nabe platform components are licensed under AGPL-3.0-or-later.
-Speiche Agent and clean shared protocol/client libraries are licensed under Apache-2.0.
+Unless a component or file states otherwise, original Nabe source,
+documentation and repository tooling use AGPL-3.0-or-later.
 
-See:
+The following components use Apache-2.0:
+- apps/cli
+- apps/speiche
+- packages/adguard-adapter
+- packages/config
+- packages/edge-protocol
+
+Package-level LICENSE files are authoritative for their components.
+Third-party material retains its upstream license.
+
+Full license texts:
 - LICENSES/AGPL-3.0-or-later.txt
 - LICENSES/Apache-2.0.txt
-- docs/licensing.md
 
-Package-level LICENSE files are authoritative for each component.
+See docs/licensing.md for component boundaries.

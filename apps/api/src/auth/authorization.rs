@@ -1,54 +1,90 @@
 use serde::Serialize;
 
-use crate::{auth::Principal, error::ApiError};
+use crate::{
+    auth::Principal,
+    db::repositories::{AuthorizationRecord, TenantAuthorization},
+    error::ApiError,
+};
 
 pub const PLATFORM_ADMIN: &str = "platform.admin";
 pub const EDGE_READ: &str = "edge.read";
 pub const EDGE_MANAGE: &str = "edge.manage";
-pub const STATS_READ_TENANT: &str = "stats.read_tenant";
-pub const QUERYLOG_READ_TENANT: &str = "querylog.read_tenant";
+pub const AUDIT_READ: &str = "audit.read";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantPermissions {
+    pub tenant_id: String,
+    pub tenant_slug: String,
+    pub roles: Vec<String>,
+    pub permissions: Vec<String>,
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectivePermissions {
     pub roles: Vec<String>,
-    pub permissions: Vec<&'static str>,
+    pub permissions: Vec<String>,
+    pub tenants: Vec<TenantPermissions>,
 }
 
-pub fn effective_permissions(principal: &Principal) -> EffectivePermissions {
-    let mut permissions = Vec::new();
-    for role in &principal.roles {
-        match role.as_str() {
-            "admin" | "platform_admin" => {
-                permissions.extend([
-                    PLATFORM_ADMIN,
-                    EDGE_READ,
-                    EDGE_MANAGE,
-                    STATS_READ_TENANT,
-                    QUERYLOG_READ_TENANT,
-                ]);
-            }
-            "tenant_owner" | "tenant_admin" => {
-                permissions.extend([EDGE_READ, STATS_READ_TENANT, QUERYLOG_READ_TENANT]);
-            }
-            "tenant_viewer" => {
-                permissions.extend([EDGE_READ, STATS_READ_TENANT]);
-            }
-            "user" | "restricted_user" => {}
-            _ => {}
+impl From<AuthorizationRecord> for EffectivePermissions {
+    fn from(record: AuthorizationRecord) -> Self {
+        Self {
+            roles: record.global_roles,
+            permissions: record.global_permissions,
+            tenants: record
+                .tenants
+                .into_iter()
+                .map(TenantPermissions::from)
+                .collect(),
         }
     }
-    permissions.sort_unstable();
-    permissions.dedup();
-    EffectivePermissions {
-        roles: principal.roles.clone(),
-        permissions,
+}
+
+impl From<TenantAuthorization> for TenantPermissions {
+    fn from(tenant: TenantAuthorization) -> Self {
+        Self {
+            tenant_id: tenant.tenant_id,
+            tenant_slug: tenant.tenant_slug,
+            roles: tenant.roles,
+            permissions: tenant.permissions,
+        }
     }
 }
 
-pub fn require(principal: &Principal, permission: &'static str) -> Result<(), ApiError> {
-    let effective = effective_permissions(principal);
-    if effective.permissions.contains(&permission) {
+pub fn principal_with_roles(
+    mut principal: Principal,
+    effective: &EffectivePermissions,
+) -> Principal {
+    principal.roles = effective.roles.clone();
+    principal
+}
+
+pub fn require_global(effective: &EffectivePermissions, permission: &str) -> Result<(), ApiError> {
+    if effective
+        .permissions
+        .iter()
+        .any(|candidate| candidate == permission)
+    {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden)
+    }
+}
+
+pub fn require_tenant(
+    effective: &EffectivePermissions,
+    tenant_id: &str,
+    permission: &str,
+) -> Result<(), ApiError> {
+    if effective.tenants.iter().any(|tenant| {
+        tenant.tenant_id == tenant_id
+            && tenant
+                .permissions
+                .iter()
+                .any(|candidate| candidate == permission)
+    }) {
         Ok(())
     } else {
         Err(ApiError::Forbidden)
@@ -57,23 +93,30 @@ pub fn require(principal: &Principal, permission: &'static str) -> Result<(), Ap
 
 #[cfg(test)]
 mod tests {
-    use crate::auth::Principal;
+    use super::{require_global, require_tenant, EffectivePermissions, TenantPermissions};
 
-    use super::{effective_permissions, require, PLATFORM_ADMIN, QUERYLOG_READ_TENANT};
-
-    #[test]
-    fn admin_has_platform_permissions() {
-        let principal = Principal::admin("zitadel", "sub", None, None);
-        assert!(require(&principal, PLATFORM_ADMIN).is_ok());
+    fn permissions() -> EffectivePermissions {
+        EffectivePermissions {
+            roles: vec!["operator".to_string()],
+            permissions: vec!["edge.read".to_string()],
+            tenants: vec![TenantPermissions {
+                tenant_id: "gray".to_string(),
+                tenant_slug: "gray".to_string(),
+                roles: vec!["viewer".to_string()],
+                permissions: vec!["tenant.read".to_string()],
+            }],
+        }
     }
 
     #[test]
-    fn user_does_not_have_querylog_permissions() {
-        let mut principal = Principal::admin("zitadel", "sub", None, None);
-        principal.roles = vec!["user".to_string()];
-        assert!(require(&principal, QUERYLOG_READ_TENANT).is_err());
-        assert!(!effective_permissions(&principal)
-            .permissions
-            .contains(&QUERYLOG_READ_TENANT));
+    fn global_permissions_are_explicit() {
+        assert!(require_global(&permissions(), "edge.read").is_ok());
+        assert!(require_global(&permissions(), "edge.manage").is_err());
+    }
+
+    #[test]
+    fn tenant_permission_cannot_cross_tenants() {
+        assert!(require_tenant(&permissions(), "gray", "tenant.read").is_ok());
+        assert!(require_tenant(&permissions(), "other", "tenant.read").is_err());
     }
 }

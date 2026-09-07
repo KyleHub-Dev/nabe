@@ -1,4 +1,4 @@
-module codeberg.org/KyleHub/nabe/apps/cli
+module github.com/KyleHub-Dev/nabe/apps/cli
 
 go 1.22
 

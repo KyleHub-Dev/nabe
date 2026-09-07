@@ -1,10 +1,24 @@
 # Nabe CLI
 
-The Nabe CLI is a Go command-line stub for future admin and operator workflows.
+The Go CLI installs and configures Nabe edge nodes. It can install AdGuard Home,
+Unbound and Speiche, enroll an edge, and update an existing installation.
+These operations modify host packages, configuration and system services.
 
-Current commands:
+## Build
 
-- `nabe version`
-- `nabe status`
+From an authorized checkout, with Go 1.22 or later:
 
-It does not store credentials and does not talk to production services yet.
+```sh
+cd apps/cli
+go build -o nabe .
+./nabe version
+./nabe status
+```
+
+For installation and enrollment, read the [edge guide](../../docs/edge-enrollment.md)
+and the [README installation procedure](../../README.md#edge-install-guide).
+Run host-changing commands only on the intended edge device.
+
+Source downloads use the GitHub repository. Anonymous downloads require public
+access; see [Git hosting](../../docs/git-hosting.md) for restricted
+checkouts and source archive configuration.

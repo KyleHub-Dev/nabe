@@ -17,12 +17,12 @@ Nabe is the product and control plane. DNS Engines do the resolver work.
 - Nabe Web: browser UI for the Nabe Console.
 - Nabe API: Rust backend authority for OIDC sessions, Turso persistence, DNS Engine adapters, and filtered query visibility.
 - Nabe Worker: future background jobs for sync, cleanup, and edge processing. It is outside MVP 0 deployment.
-- Nabe CLI: Go command-line tool for future admin/operator workflows.
+- Nabe CLI: Go command-line tool for edge installation and configuration.
 - DB: Turso Database Rust rewrite, embedded in the Rust API container for MVP 0.
 - AdGuard Home engine adapter: first DNS Engine integration.
 - Unbound: local recursive resolver component per deployment.
-- Speiche Agent: outbound edge connector for future Edge Nodes.
-- Edge Nodes: future remote/local DNS nodes managed through Speiche.
+- Speiche Agent: outbound connector for Edge Nodes.
+- Edge Nodes: remote/local DNS nodes connected through Speiche.
 
 ## Data Flow
 

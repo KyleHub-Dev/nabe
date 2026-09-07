@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/KyleHub/nabe/apps/cli/internal/config"
+	"github.com/KyleHub-Dev/nabe/apps/cli/internal/config"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
 )
@@ -878,7 +878,7 @@ func installSpeiche(edgeInstallOptions, hostFacts) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	sourceURL := getenv("NABE_SOURCE_URL", "https://codeberg.org/KyleHub/nabe/archive/main.tar.gz")
+	sourceURL := getenv("NABE_SOURCE_URL", "https://github.com/KyleHub-Dev/nabe/archive/refs/heads/main.tar.gz")
 	archive := filepath.Join(tmp, "nabe.tar.gz")
 	if err := download(sourceURL, archive); err != nil {
 		return err
@@ -955,6 +955,7 @@ Wants=network-online.target
 
 [Service]
 EnvironmentFile=/etc/nabe/speiche.env
+EnvironmentFile=-/etc/nabe/adguard-ui.env
 ExecStart=/usr/local/bin/speiche
 Restart=always
 RestartSec=10

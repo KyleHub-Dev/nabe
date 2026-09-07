@@ -15,6 +15,22 @@ pub struct Principal {
 }
 
 impl Principal {
+    pub fn identity(
+        provider: impl Into<String>,
+        subject: impl Into<String>,
+        email: Option<String>,
+        display_name: Option<String>,
+    ) -> Self {
+        Self {
+            provider: provider.into(),
+            subject: subject.into(),
+            email,
+            display_name,
+            roles: Vec::new(),
+        }
+    }
+
+    #[cfg(test)]
     pub fn admin(
         provider: impl Into<String>,
         subject: impl Into<String>,

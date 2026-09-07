@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE_URL="${NABE_SOURCE_URL:-https://codeberg.org/KyleHub/nabe/archive/main.tar.gz}"
+SOURCE_URL="${NABE_SOURCE_URL:-https://github.com/KyleHub-Dev/nabe/archive/refs/heads/main.tar.gz}"
 INSTALL_PATH="${NABE_INSTALL_PATH:-/usr/local/bin/nabe}"
 
 need() {

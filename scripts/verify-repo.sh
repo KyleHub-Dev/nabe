@@ -32,7 +32,7 @@ grep -R "Apache-2.0\\|AGPL-3.0-or-later" apps packages \
   --exclude-dir=.svelte-kit >/dev/null
 
 echo "== obvious secret sanity =="
-if grep -R -n -E "(BEGIN (RSA|OPENSSH|PRIVATE) KEY|ghp_[A-Za-z0-9]|glpat-[A-Za-z0-9]|password *= *[^[:space:]'\"]+)" . \
+if grep -R -l -E "(BEGIN (RSA|OPENSSH|PRIVATE) KEY|ghp_[A-Za-z0-9]|glpat-[A-Za-z0-9]|password *= *[^[:space:]'\"]+)" . \
   --exclude-dir=.git \
   --exclude-dir=node_modules \
   --exclude-dir=target \

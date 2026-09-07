@@ -102,8 +102,8 @@ pub async fn exchange_code_for_principal(
             .map_err(|_| ApiError::BadUpstreamResponse)?;
 
         let display_name = userinfo.name.or(userinfo.preferred_username);
-        return Ok(Principal::admin(
-            "zitadel",
+        return Ok(Principal::identity(
+            issuer_provider(config),
             userinfo.sub,
             userinfo.email,
             display_name,
@@ -143,6 +143,14 @@ fn random_urlsafe(len: usize) -> String {
     let mut bytes = vec![0u8; len];
     rand::thread_rng().fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn issuer_provider(config: &Config) -> String {
+    config
+        .oidc_issuer_url
+        .host_str()
+        .unwrap_or("oidc")
+        .to_string()
 }
 
 fn pkce_challenge(verifier: &str) -> String {

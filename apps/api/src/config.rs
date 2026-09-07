@@ -23,6 +23,8 @@ pub struct Config {
     pub oidc_client_id: Option<String>,
     pub oidc_redirect_uri: Url,
     pub oidc_post_logout_redirect_uri: Url,
+    pub bootstrap_admin_subjects: Vec<String>,
+    pub stats_retention_days: i64,
 }
 
 impl Config {
@@ -54,8 +56,20 @@ impl Config {
             oidc_client_id: env_opt("OIDC_CLIENT_ID"),
             oidc_redirect_uri,
             oidc_post_logout_redirect_uri,
+            bootstrap_admin_subjects: env_list("NABE_BOOTSTRAP_ADMIN_SUBJECTS"),
+            stats_retention_days: env_positive_i64("NABE_STATS_RETENTION_DAYS", 30)?,
         })
     }
+}
+
+fn env_list(key: &str) -> Vec<String> {
+    env::var(key)
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 fn env_or(key: &str, fallback: &str) -> String {
@@ -73,6 +87,14 @@ fn env_i64(key: &str, fallback: i64) -> anyhow::Result<i64> {
     env_or(key, &fallback.to_string())
         .parse()
         .with_context(|| format!("{key} must be an integer"))
+}
+
+fn env_positive_i64(key: &str, fallback: i64) -> anyhow::Result<i64> {
+    let value = env_i64(key, fallback)?;
+    if value < 1 {
+        return Err(anyhow!("{key} must be greater than zero"));
+    }
+    Ok(value)
 }
 
 fn parse_url(key: &str, fallback: &str) -> anyhow::Result<Url> {

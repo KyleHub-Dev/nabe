@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -14,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/KyleHub/nabe/apps/speiche/internal/config"
-	"codeberg.org/KyleHub/nabe/apps/speiche/internal/drivers/adguard"
-	"codeberg.org/KyleHub/nabe/apps/speiche/internal/heartbeat"
+	"github.com/KyleHub-Dev/nabe/apps/speiche/internal/config"
+	"github.com/KyleHub-Dev/nabe/apps/speiche/internal/drivers/adguard"
+	"github.com/KyleHub-Dev/nabe/apps/speiche/internal/heartbeat"
 )
 
 const version = "0.0.0"
@@ -24,7 +26,7 @@ const version = "0.0.0"
 func main() {
 	cfg := config.FromEnv()
 	client := heartbeat.NewClient(cfg.NabeAPIURL, cfg.EnrollmentToken)
-	driver := adguard.NewDriver(cfg.AdGuardURL)
+	driver := adguard.NewDriver(cfg.AdGuardURL, cfg.AdGuardUsername, cfg.AdGuardPassword)
 	interval, err := strconv.Atoi(cfg.IntervalSeconds)
 	if err != nil || interval < 5 {
 		interval = 30
@@ -48,6 +50,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("identity setup failed: %v", err)
 	}
+	if identity.Enrolled && identity.Credential == "" {
+		identity.Enrolled = false
+		if err := saveIdentity(cfg.StateDir, identity); err != nil {
+			log.Fatalf("legacy identity migration failed: %v", err)
+		}
+	}
 
 	currentInterval := interval
 	consecutiveFailures := 0
@@ -58,14 +66,28 @@ func main() {
 		if !identity.Enrolled {
 			response, err = client.Enroll(ctx, report)
 			if err == nil {
-				identity.Enrolled = true
-				err = saveIdentity(cfg.StateDir, identity)
+				if response.Credential == "" {
+					err = errors.New("central enrollment response omitted edge credential")
+				} else {
+					identity.Credential = response.Credential
+					identity.Enrolled = true
+					err = saveIdentity(cfg.StateDir, identity)
+				}
 			}
 		} else {
-			response, err = client.Heartbeat(ctx, report)
+			response, err = client.Heartbeat(ctx, report, identity.Credential)
 		}
 		cancel()
 		if err != nil {
+			if identity.Enrolled && heartbeat.IsForbidden(err) {
+				identity.Enrolled = false
+				identity.Credential = ""
+				if saveErr := saveIdentity(cfg.StateDir, identity); saveErr != nil {
+					log.Printf("credential rejection state save failed: %v", saveErr)
+				} else {
+					log.Printf("edge credential rejected; enrollment will be retried with the bootstrap token")
+				}
+			}
 			consecutiveFailures++
 			currentInterval = nextHeartbeatInterval(currentInterval, maxInterval, backoffAfter, consecutiveFailures)
 			log.Printf("heartbeat failed: %v; failures=%d next_sleep=%s", err, consecutiveFailures, time.Duration(currentInterval)*time.Second)
@@ -76,6 +98,11 @@ func main() {
 			consecutiveFailures = 0
 			currentInterval = interval
 			log.Printf("heartbeat ok: node=%s status=%s last_seen=%s", response.NodeID, response.HealthStatus, response.LastSeenAt)
+			telemetryCtx, telemetryCancel := context.WithTimeout(context.Background(), 20*time.Second)
+			if telemetryErr := collectAndSendStats(telemetryCtx, client, driver, cfg.StateDir, &identity); telemetryErr != nil {
+				log.Printf("telemetry upload failed: %v", telemetryErr)
+			}
+			telemetryCancel()
 		}
 		time.Sleep(time.Duration(currentInterval) * time.Second)
 	}
@@ -93,9 +120,84 @@ func nextHeartbeatInterval(current int, max int, backoffAfter int, consecutiveFa
 }
 
 type identityFile struct {
-	NodeID   string `json:"nodeId"`
-	NodeName string `json:"nodeName"`
-	Enrolled bool   `json:"enrolled"`
+	NodeID           string                  `json:"nodeId"`
+	NodeName         string                  `json:"nodeName"`
+	Enrolled         bool                    `json:"enrolled"`
+	Credential       string                  `json:"credential,omitempty"`
+	TelemetryCursor  string                  `json:"telemetryCursor,omitempty"`
+	PendingTelemetry *heartbeat.StatsRequest `json:"pendingTelemetry,omitempty"`
+}
+
+func collectAndSendStats(
+	ctx context.Context,
+	client heartbeat.Client,
+	driver adguard.Driver,
+	stateDir string,
+	identity *identityFile,
+) error {
+	if identity.PendingTelemetry != nil {
+		response, err := client.SendStats(ctx, *identity.PendingTelemetry, identity.Credential)
+		if err != nil {
+			return err
+		}
+		if response.BatchID != identity.PendingTelemetry.BatchID {
+			return errors.New("central returned mismatched telemetry batch ID")
+		}
+		identity.TelemetryCursor = identity.PendingTelemetry.CollectedThrough
+		identity.PendingTelemetry = nil
+		return saveIdentity(stateDir, *identity)
+	}
+	since := time.Now().UTC().Add(-5 * time.Minute)
+	if identity.TelemetryCursor != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, identity.TelemetryCursor)
+		if err != nil {
+			return fmt.Errorf("invalid telemetry cursor: %w", err)
+		}
+		since = parsed.UTC()
+	}
+	buckets, collectedThrough, err := driver.CollectStats(ctx, since)
+	if err != nil {
+		return err
+	}
+	if len(buckets) == 0 || !collectedThrough.After(since) {
+		return nil
+	}
+	request := heartbeat.StatsRequest{
+		NodeID:           identity.NodeID,
+		CollectedThrough: collectedThrough.Format(time.RFC3339Nano),
+		Buckets:          make([]heartbeat.StatBucket, 0, len(buckets)),
+	}
+	for _, bucket := range buckets {
+		request.Buckets = append(request.Buckets, heartbeat.StatBucket{
+			ClientID:      bucket.ClientID,
+			BucketStart:   bucket.BucketStart,
+			BucketSeconds: bucket.BucketSeconds,
+			Queries:       bucket.Queries,
+			Blocked:       bucket.Blocked,
+			Cached:        bucket.Cached,
+		})
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(append([]byte(identity.TelemetryCursor+"|"), payload...))
+	request.BatchID = fmt.Sprintf("stats-%x", digest[:16])
+	identity.PendingTelemetry = &request
+	if err := saveIdentity(stateDir, *identity); err != nil {
+		identity.PendingTelemetry = nil
+		return err
+	}
+	response, err := client.SendStats(ctx, request, identity.Credential)
+	if err != nil {
+		return err
+	}
+	if response.BatchID != request.BatchID {
+		return errors.New("central returned mismatched telemetry batch ID")
+	}
+	identity.TelemetryCursor = collectedThrough.Format(time.RFC3339Nano)
+	identity.PendingTelemetry = nil
+	return saveIdentity(stateDir, *identity)
 }
 
 func loadOrCreateIdentity(stateDir string, nodeName string) (identityFile, error) {
