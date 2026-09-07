@@ -19,6 +19,6 @@ For installation and enrollment, read the [edge guide](../../docs/edge-enrollmen
 and the [README installation procedure](../../README.md#edge-install-guide).
 Run host-changing commands only on the intended edge device.
 
-Source downloads use the GitHub repository. Anonymous downloads require public
-access; see [Git hosting](../../docs/git-hosting.md) for restricted
-checkouts and source archive configuration.
+Source downloads use the public GitHub repository. See
+[Git hosting](../../docs/git-hosting.md) for local builds and source archive
+configuration.

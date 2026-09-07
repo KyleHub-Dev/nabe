@@ -24,8 +24,7 @@ git remote get-url --push --all origin
 Both commands should return only `https://github.com/KyleHub-Dev/nabe.git`.
 Store authentication in a credential helper, outside the repository.
 
-The default CLI and Speiche downloads use GitHub source archives. Anonymous
-installation requires the repository to be public. While access is restricted,
-use an authorized checkout and build the CLI locally with `go build` in
-`apps/cli`; use `NABE_SOURCE_URL` for an accessible source archive when installing
-Speiche. The installer does not add authentication to archive requests.
+The default CLI and Speiche downloads use public GitHub source archives and need
+no repository credentials. Build the CLI locally with `go build` in `apps/cli`
+if using a checkout. `NABE_SOURCE_URL` can select another accessible source
+archive; the installer does not add authentication to archive requests.

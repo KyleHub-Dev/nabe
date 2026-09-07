@@ -59,9 +59,9 @@ central and its identity provider are unreachable.
 
 Complete when the household administrator runs the documented terminal bootstrap
 and then performs wizard setup and routine changes without a terminal, with readable errors and a way back to the original router
-settings. GitHub repositories remain private for now; provide an authorized
-installer/source distribution path without embedding repository credentials in
-the installer. Anonymous GitHub downloads are not yet a working bootstrap path.
+settings. The installer and source archives are public on GitHub. Verify the
+bootstrap on a fresh supported Pi OS installation without repository credentials;
+source availability alone does not establish that the household setup works.
 
 ## 4. Run the household pilot
 

@@ -78,9 +78,8 @@ The current components are:
 `origin` fetches and pushes there. For existing checkouts, see the
 [remote setup instructions](docs/git-hosting.md).
 
-Anonymous CLI and Speiche downloads require public repository access. While the
-repository is private, use an authorized checkout and the build instructions in
-[apps/cli/README.md](apps/cli/README.md).
+CLI and Speiche source downloads are available from GitHub without an account.
+For a local build, see [apps/cli/README.md](apps/cli/README.md).
 
 ## MVP Development Stack
 
