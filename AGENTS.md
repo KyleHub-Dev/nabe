@@ -9,7 +9,7 @@ resolve queries. AdGuard Home is the first engine, accessed through adapters.
   [docs/roadmap.md](docs/roadmap.md). The household pilot is the next milestone;
   broader historical goals do not add requirements. Distinguish working-tree
   changes from releases.
-- For household, appliance or device terminology, read [CONTEXT.md](CONTEXT.md).
+- For household, appliance or device terminology, read [GLOSSARY.md](GLOSSARY.md).
 - For architecture or security decisions, read the relevant accepted record in
   [docs/adr/README.md](docs/adr/README.md). ADRs record decisions; check code and
   tests to establish what is implemented.

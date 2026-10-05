@@ -7,7 +7,7 @@ apartment, his parents' home and a friend's family home.
 This is the current product direction, agreed in September 2026. The browser
 wizard, household setup and recovery experience below are requirements, not
 features already shipped. [roadmap.md](roadmap.md) owns implementation order and
-pilot acceptance. [CONTEXT.md](../CONTEXT.md) defines the product language.
+pilot acceptance. [GLOSSARY.md](../GLOSSARY.md) defines the product language.
 
 ## Who it serves
 
